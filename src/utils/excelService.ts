@@ -5,6 +5,16 @@ import { recalculateMonthData } from './computation';
 import { evaluateFormulaInput } from './formula';
 import { computeOverallWorkbookData, groupSheetsByCalendarMonth } from './monthGrouping';
 import { DEFAULT_MERGE_COLUMN_ORDER, getEffectiveRowMergeRanges } from './cellMerge';
+import { getActiveCurrencyConfig } from './currency';
+
+function getExcelCurrencyFormat(): string {
+  const currency = getActiveCurrencyConfig();
+  const sym = currency.symbol.replace(/"/g, '');
+  if (currency.decimals === 0) {
+    return `"${sym}"#,##0;[Red]-"${sym}"#,##0`;
+  }
+  return `"${sym}"#,##0.00;[Red]-"${sym}"#,##0.00`;
+}
 
 // Normalizes row labels from imported Excel sheets
 const LABEL_TO_ROW_ID: Record<string, RowId> = {
@@ -132,14 +142,15 @@ function buildWorksheetForMonth(month: MonthData): XLSX.WorkSheet {
   }
 
   // Format currency on numeric cells
+  const excelFmt = getExcelCurrencyFormat();
   for (let r = 2; r < wsData.length; r++) {
     const cellB = ws[XLSX.utils.encode_cell({ r, c: 1 })];
     if (cellB && typeof cellB.v === 'number') {
-      cellB.z = '"₱"#,##0.00;[Red]-"₱"#,##0.00';
+      cellB.z = excelFmt;
     }
     const cellC = ws[XLSX.utils.encode_cell({ r, c: 2 })];
     if (cellC && typeof cellC.v === 'number') {
-      cellC.z = '"₱"#,##0.00;[Red]-"₱"#,##0.00';
+      cellC.z = excelFmt;
     }
   }
 
@@ -169,6 +180,8 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   const wsData: any[][] = [];
 
+  const currencyCode = getActiveCurrencyConfig().code;
+
   // Title
   wsData.push(['PESOBUDGET - OVERALL FINANCIAL SUMMARY & ANALYTICS REPORT', '', '', '', '']);
   wsData.push([`Aggregated across ${combined.sheetCount} sheets in workbook`, '', '', '', '']);
@@ -176,7 +189,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   // Section 1: Financial Snapshot KPI Metrics
   wsData.push(['PAGE 1: OVERALL FINANCIAL SNAPSHOT & KEY METRICS', '', '', '', '']);
-  wsData.push(['Metric', 'Amount (PHP)', 'Notes / Description', '', '']);
+  wsData.push(['Metric', `Amount (${currencyCode})`, 'Notes / Description', '', '']);
   wsData.push(['Total Monthly Bills', Math.abs(combined.totalExpenses), 'House, utilities, loans & Lazada']);
   wsData.push(['Metrobank ATM Cash', combined.plannedMetrobank, 'Physical cash withdrawn for bills']);
   wsData.push(['QR PH Digital Payments', combined.plannedQrPh, 'Digital transfers for Lazada/Shopee']);
@@ -190,7 +203,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   // Section 2: Payroll Settlement & Cutoff Breakdown
   wsData.push(['PAGE 2: PAYROLL SETTLEMENT & CUTOFF ANALYSIS', '', '', '', '']);
-  wsData.push(['Settlement Status', 'Amount (PHP)', 'Count of Bills', '% of Total Bills', '']);
+  wsData.push(['Settlement Status', `Amount (${currencyCode})`, 'Count of Bills', '% of Total Bills', '']);
   wsData.push(['Settled Bills (OK)', combined.settledAmount, combined.settledCount, `${combined.settlementPercent.toFixed(1)}%`]);
   wsData.push(['Scheduled Next Payroll', combined.nextPayrollAmount, combined.nextPayrollCount, `${(100 - combined.settlementPercent).toFixed(1)}%`]);
   wsData.push([]);
@@ -202,7 +215,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   // Section 3: Expense Categories Breakdown
   wsData.push(['PAGE 3: EXPENSE CATEGORY BREAKDOWN', '', '', '', '']);
-  wsData.push(['Category', 'Amount (PHP)', 'Share of Total Bills (%)', '', '']);
+  wsData.push(['Category', `Amount (${currencyCode})`, 'Share of Total Bills (%)', '', '']);
   combined.expenseCategories.forEach((cat) => {
     const pct = combined.totalExpenses > 0 ? (cat.amount / combined.totalExpenses) * 100 : 0;
     wsData.push([cat.label, cat.amount, `${pct.toFixed(1)}%`]);
@@ -211,7 +224,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   // Section 4: Cash Flow - Physical ATM Cash vs Digital QR PH
   wsData.push(['PAGE 4: CASH FLOW (ATM CASH VS DIGITAL)', '', '', '', '']);
-  wsData.push(['Channel', 'Amount (PHP)', 'Description', '', '']);
+  wsData.push(['Channel', `Amount (${currencyCode})`, 'Description', '', '']);
   wsData.push(['Metrobank ATM Cash', combined.plannedMetrobank, 'Physical cash withdrawal']);
   wsData.push(['QR PH Digital Transfer', combined.plannedQrPh, 'InstaPay / QR digital payments']);
   wsData.push(['Total Disbursed', combined.plannedMetrobank + combined.plannedQrPh, 'Sum of all disbursements']);
@@ -219,7 +232,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   // Section 5: Executive Savings & Stash Breakdown
   wsData.push(['PAGE 5: EXECUTIVE SAVINGS & STASH BREAKDOWN', '', '', '', '']);
-  wsData.push(['Savings Vehicle', 'Amount (PHP)', 'Category', 'Liquidity', '']);
+  wsData.push(['Savings Vehicle', `Amount (${currencyCode})`, 'Category', 'Liquidity', '']);
   wsData.push(['Pag-IBIG MP2 Government', Math.abs(combined.governmentSavings), 'Government Sovereign Fund', '5-Year Maturity']);
   wsData.push(['GoTyme Stash', combined.gotymeVal, 'Personal Bank', 'Immediate Liquid']);
   wsData.push(['Payroll Ending Balance', combined.balanceVal, 'Operating Surplus', 'Immediate Liquid']);
@@ -229,7 +242,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
 
   // Section 6: Annual Cash Flow Waterfall & Net Position
   wsData.push(['PAGE 6: CASH FLOW WATERFALL & NET POSITION', '', '', '', '']);
-  wsData.push(['Flow Item', 'Amount (PHP)', 'Net Effect', '', '']);
+  wsData.push(['Flow Item', `Amount (${currencyCode})`, 'Net Effect', '', '']);
   wsData.push(['(+) Total Annual Salary', combined.salaryVal, 'Inflow']);
   wsData.push(['(-) Metrobank & QR PH Bills', -Math.abs(combined.totalExpenses), 'Outflow']);
   wsData.push(['(-) Pag-IBIG MP2 Government Savings', -Math.abs(combined.governmentSavings), 'Savings Allocation']);
@@ -246,10 +259,11 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
   const ws = XLSX.utils.aoa_to_sheet(wsData);
   ws['!cols'] = [{ wch: 38 }, { wch: 22 }, { wch: 30 }, { wch: 22 }, { wch: 22 }];
 
+  const summaryExcelFmt = getExcelCurrencyFormat();
   for (let r = 3; r < wsData.length; r++) {
     const cellB = ws[XLSX.utils.encode_cell({ r, c: 1 })];
     if (cellB && typeof cellB.v === 'number') {
-      cellB.z = '"₱"#,##0.00;[Red]-"₱"#,##0.00';
+      cellB.z = summaryExcelFmt;
     }
   }
 

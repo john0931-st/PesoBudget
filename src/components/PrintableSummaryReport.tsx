@@ -1,6 +1,7 @@
 import React from 'react';
 import { MonthData } from '../types/budget';
 import { formatPHP } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import {
   CombinedMonthData,
   groupSheetsByCalendarMonth,
@@ -31,6 +32,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
   allMonths,
   activeMonthData,
 }) => {
+  useCurrency();
   const {
     totalExpenses,
     plannedMetrobank,

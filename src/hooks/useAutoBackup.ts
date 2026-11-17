@@ -49,8 +49,13 @@ export function useAutoBackup({
   monthsRef.current = months;
   const profileRef = useRef(securityProfile);
   profileRef.current = securityProfile;
+  const onUpdateSecurityProfileRef = useRef(onUpdateSecurityProfile);
+  onUpdateSecurityProfileRef.current = onUpdateSecurityProfile;
+  const onRestoreMonthsRef = useRef(onRestoreMonths);
+  onRestoreMonthsRef.current = onRestoreMonths;
 
   const [autoSyncNotice, setAutoSyncNotice] = useState<string | null>(null);
+  const [isSyncingFirebase, setIsSyncingFirebase] = useState(false);
 
   const showNotice = (msg: string, ms = 3800) => {
     setAutoSyncNotice(msg);
@@ -62,6 +67,7 @@ export function useAutoBackup({
   // 1. Initial Cloud Sync & Real-time cross-device Firestore listener when signed in & online
   useEffect(() => {
     if (!isAuthReady || !firebaseUid || !isOnline) {
+      setIsSyncingFirebase(false);
       return;
     }
 
@@ -72,24 +78,31 @@ export function useAutoBackup({
       try {
         if (syncedUidRef.current !== firebaseUid) {
           syncedUidRef.current = firebaseUid;
-          const cloudMonths = await fetchSheetsFromFirestore(firebaseUid);
-          if (isCancelled) return;
+          setIsSyncingFirebase(true);
+          try {
+            const cloudMonths = await fetchSheetsFromFirestore(firebaseUid);
+            if (isCancelled) return;
 
-          const cloudKeys = Object.keys(cloudMonths);
-          const localMonths = monthsRef.current;
-          const cloudLatest = getLatestUpdatedMs(cloudMonths);
-          const localLatest = getLatestUpdatedMs(localMonths);
+            const cloudKeys = Object.keys(cloudMonths);
+            const localMonths = monthsRef.current;
+            const cloudLatest = getLatestUpdatedMs(cloudMonths);
+            const localLatest = getLatestUpdatedMs(localMonths);
 
-          if (cloudKeys.length > 0 && (cloudLatest >= localLatest || Object.keys(localMonths).length === 0)) {
-            if (JSON.stringify(cloudMonths) !== JSON.stringify(localMonths)) {
-              suppressNextUploadRef.current = true;
-              onRestoreMonths(cloudMonths);
-              showNotice(
-                `Synced ${cloudKeys.length} sheet(s) from Firebase (${profileRef.current.email || 'Cloud'})`
-              );
+            if (cloudKeys.length > 0 && (cloudLatest >= localLatest || Object.keys(localMonths).length === 0)) {
+              if (JSON.stringify(cloudMonths) !== JSON.stringify(localMonths)) {
+                suppressNextUploadRef.current = true;
+                onRestoreMonthsRef.current(cloudMonths);
+                showNotice(
+                  `Synced ${cloudKeys.length} sheet(s) from Firebase (${profileRef.current.email || 'Cloud'})`
+                );
+              }
+            } else if (Object.keys(localMonths).length > 0 && profileRef.current.autoBackupEnabled !== false) {
+              await syncAllMonthsToFirestore(firebaseUid, localMonths);
             }
-          } else if (Object.keys(localMonths).length > 0 && profileRef.current.autoBackupEnabled !== false) {
-            await syncAllMonthsToFirestore(firebaseUid, localMonths);
+          } finally {
+            if (!isCancelled) {
+              setIsSyncingFirebase(false);
+            }
           }
         }
 
@@ -105,7 +118,7 @@ export function useAutoBackup({
             const localLatest = getLatestUpdatedMs(monthsRef.current);
             if (remoteLatest >= localLatest) {
               suppressNextUploadRef.current = true;
-              onRestoreMonths(remoteMonths);
+              onRestoreMonthsRef.current(remoteMonths);
               showNotice(`Updated sheets from cloud (${profileRef.current.email || 'Account'})`);
             }
           }
@@ -121,12 +134,13 @@ export function useAutoBackup({
       isCancelled = true;
       if (unsubscribe) unsubscribe();
     };
-  }, [isAuthReady, firebaseUid, isOnline, onRestoreMonths]);
+  }, [isAuthReady, firebaseUid, isOnline]);
 
   // Reset sync marker when signed out
   useEffect(() => {
     if (!firebaseUid) {
       syncedUidRef.current = null;
+      setIsSyncingFirebase(false);
     }
   }, [firebaseUid]);
 
@@ -157,31 +171,41 @@ export function useAutoBackup({
       clearTimeout(debounceTimerRef.current);
     }
 
+    let isCancelled = false;
     debounceTimerRef.current = setTimeout(async () => {
+      if (isCancelled) return;
+      setIsSyncingFirebase(true);
       try {
-        await syncAllMonthsToFirestore(firebaseUid, months);
+        await syncAllMonthsToFirestore(firebaseUid, monthsRef.current);
+        if (isCancelled) return;
         const updated: UserSecurityProfile = {
           ...profileRef.current,
           lastBackupTime: new Date().toISOString(),
           backupSyncStatus: 'synced',
         };
         saveSecurityProfile(updated);
-        onUpdateSecurityProfile(updated);
+        onUpdateSecurityProfileRef.current(updated);
         showNotice(`Synced to Firebase (${updated.email || 'Google Account'})`, 3000);
       } catch (err) {
         console.error('Firebase auto-sync error:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsSyncingFirebase(false);
+        }
       }
     }, 600);
 
     return () => {
+      isCancelled = true;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [months, isOnline, isAuthReady, firebaseUid, securityProfile.autoBackupEnabled, onUpdateSecurityProfile]);
+  }, [months, isOnline, isAuthReady, firebaseUid, securityProfile.autoBackupEnabled]);
 
   return {
     autoSyncNotice,
+    isSyncingFirebase,
     clearNotice: () => setAutoSyncNotice(null),
   };
 }

@@ -5,6 +5,7 @@ import { INITIAL_ROW_ORDER } from './storage';
 import { getChangeLogs } from './changeLogService';
 import { computeOverallWorkbookData, groupSheetsByCalendarMonth } from './monthGrouping';
 import { getEffectiveColumnOrderForMonth, isMonthlyKinsenasMerged } from './cellMerge';
+import { formatCurrency, getActiveCurrencyConfig } from './currency';
 
 export type PrintTargetSheet = 'active' | 'summary' | 'year' | 'changelog';
 
@@ -16,21 +17,11 @@ export interface PrintContextData {
 }
 
 function formatAsciiPHP(val: number): string {
-  const abs = Math.abs(val);
-  const formatted = abs.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return val < 0 ? `-PHP ${formatted}` : `PHP ${formatted}`;
+  return formatCurrency(val, { ascii: true });
 }
 
 function formatHtmlPHP(val: number): string {
-  const abs = Math.abs(val);
-  const formatted = abs.toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return val < 0 ? `-₱${formatted}` : `₱${formatted}`;
+  return formatCurrency(val);
 }
 
 function escapeHtml(text: string): string {
@@ -165,7 +156,7 @@ export function downloadBudgetPdf(
 
     autoTable(doc, {
       startY: 72,
-      head: [['Executive Metric', 'Amount (PHP)', 'Notes']],
+      head: [['Executive Metric', `Amount (${getActiveCurrencyConfig().code})`, 'Notes']],
       body: [
         ['Total Gross Salary', formatAsciiPHP(combined.salaryVal), 'Combined salary across sheets'],
         ['Total Bills / Expenses', formatAsciiPHP(Math.abs(combined.totalExpenses)), 'House, utilities, loans & Lazada'],
@@ -352,7 +343,7 @@ function buildPrintableHtmlDocument(
           <thead>
             <tr>
               <th>Executive Metric</th>
-              <th class="num">Amount (PHP)</th>
+              <th class="num">Amount (${escapeHtml(getActiveCurrencyConfig().code)})</th>
               <th>Description</th>
             </tr>
           </thead>

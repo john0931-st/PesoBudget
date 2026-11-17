@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MonthData } from '../types/budget';
 import { formatPHP } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import {
   groupSheetsByCalendarMonth,
   extractMonthKey,
@@ -32,6 +33,7 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
   activeMonthData,
   onSelectMonth,
 }) => {
+  const { currency } = useCurrency();
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
 
   // Group all sheets by calendar month
@@ -158,7 +160,7 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
                 key={i}
                 className="text-[9px] sm:text-[10px] lg:text-xs font-mono font-medium text-slate-400 dark:text-slate-500 tabular-nums leading-none"
               >
-                {tick === 0 ? '₱0' : `₱${Math.round(tick / 1000)}k`}
+                {tick === 0 ? `${currency.symbol.trim()}0` : `${currency.symbol.trim()}${Math.round(tick / 1000)}k`}
               </span>
             ))}
           </div>

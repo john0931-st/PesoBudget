@@ -18,7 +18,8 @@ export type OfflineActionType =
   | 'label_rename'
   | 'remarks_change'
   | 'item_add'
-  | 'item_remove';
+  | 'item_remove'
+  | 'row_reorder';
 
 export interface OfflineChangeItem {
   id: string;
@@ -64,6 +65,7 @@ const ACTION_LABEL_MAP: Record<OfflineActionType, string> = {
   remarks_change: 'Remarks Change',
   item_add: 'Item Added',
   item_remove: 'Item Removed',
+  row_reorder: 'Row Reordered',
 };
 
 /**

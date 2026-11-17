@@ -23,6 +23,7 @@ import {
 import { HistoricalProgressionChart } from './HistoricalProgressionChart';
 import { PrintableSummaryReport } from './PrintableSummaryReport';
 import { useTrackpadSwipe } from '../hooks/useTrackpadSwipe';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface DataVisualizationProps {
   monthData: MonthData;
@@ -39,6 +40,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'full_report'>('cards');
+  useCurrency();
 
   // Automatically reset slice highlight when tapping or clicking outside
   useEffect(() => {

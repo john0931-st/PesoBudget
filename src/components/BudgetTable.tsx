@@ -10,7 +10,7 @@
  * Zero personal information. Every function and section is thoroughly documented.
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   MonthData,
   RowId,
@@ -27,6 +27,8 @@ import {
   getEffectiveRowMergeRanges,
   resolveMergePrimaryColumn,
 } from '../utils/cellMerge';
+import { formatCurrency, stripCurrencySymbols } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import { EditFormulaModal } from './EditFormulaModal';
 import {
   Plus,
@@ -42,6 +44,8 @@ import {
   RotateCcw,
   Combine,
   Split,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 interface BudgetTableProps {
@@ -102,6 +106,7 @@ interface BudgetTableProps {
   onUpdateCustomColumnLabel?: (colId: string, newTitle: string) => void;
   onMergeRowCells?: (rowId: RowId, startCol: CellColumn, endCol: CellColumn) => void;
   onUnmergeRowCells?: (rowId: RowId, targetCol: CellColumn) => void;
+  onReorderRows?: (fromIndex: number, toIndex: number) => void;
 }
 
 const DEFAULT_COLUMN_ORDER = ['payments', 'monthly', 'cutoff15th', 'remarks'];
@@ -130,7 +135,25 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
   onUpdateCustomColumnLabel,
   onMergeRowCells,
   onUnmergeRowCells,
+  onReorderRows,
 }) => {
+  const { currency } = useCurrency();
+  const currencySymbolClean = currency.symbol.trim();
+
+  // Drag-and-drop & FLIP row animation state
+  const [draggedRowId, setDraggedRowId] = useState<RowId | null>(null);
+  const [dragOverState, setDragOverState] = useState<{
+    rowId: RowId;
+    position: 'above' | 'below';
+  } | null>(null);
+  const [recentlyMovedRowId, setRecentlyMovedRowId] = useState<RowId | null>(null);
+  const [newlyAddedRowIds, setNewlyAddedRowIds] = useState<Set<RowId>>(() => new Set());
+  const rowElsRef = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const prevTopsRef = useRef<Record<string, number>>({});
+  const prevRowSetRef = useRef<Set<string> | null>(null);
+  const prevSheetIdRef = useRef<string>(monthData.id);
+  const moveHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Cell currently in active inline text editing mode
   const [editingCell, setEditingCell] = useState<{
     rowId: RowId;
@@ -503,7 +526,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
   };
 
   /**
-   * Formats numeric currency values into Philippine Peso (₱#,##0.00)
+   * Formats numeric currency values into the user's selected international currency
    * With currency symbol strictly on the left while the numeric value is on the right.
    */
   const renderCurrencyCell = (value: number, rawInput: string, rowId: RowId) => {
@@ -516,15 +539,15 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
 
     const isNegative = value < 0;
     const absVal = Math.abs(value || 0);
-    const formatted = absVal.toLocaleString('en-PH', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+    const formatted = absVal.toLocaleString(currency.locale, {
+      minimumFractionDigits: currency.decimals,
+      maximumFractionDigits: currency.decimals,
     });
 
     return (
       <div className="flex items-center justify-between w-full px-1 sm:px-1.5 lg:px-2.5 min-w-0">
         <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium opacity-90">
-          {isNegative ? '-₱' : '₱'}
+          {isNegative ? `-${currency.symbol}` : currency.symbol}
         </span>
         <span className="font-mono tabular-nums tracking-tight font-medium text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">
           {formatted}
@@ -538,32 +561,36 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
    * Ensures exactly ONE currency symbol on the left, and the numeric value on the right
    */
   const renderRemarksCurrency = (remarksVal: string | undefined) => {
+    const zeroStr = currency.decimals > 0 ? `0.${'0'.repeat(currency.decimals)}` : '0';
     if (!remarksVal || remarksVal === '—' || remarksVal === '') {
       return (
         <div className="flex items-center justify-between w-full px-1 sm:px-1.5 lg:px-2.5 opacity-60 min-w-0">
-          <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium">₱</span>
-          <span className="font-mono tabular-nums font-semibold text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">0.00</span>
+          <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium">
+            {currency.symbol}
+          </span>
+          <span className="font-mono tabular-nums font-semibold text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">
+            {zeroStr}
+          </span>
         </div>
       );
     }
 
-    // Strip any existing ₱, P, php, PHP, or whitespace
-    const cleaned = remarksVal.replace(/[₱PphpPHP]/g, '').trim();
+    const cleaned = stripCurrencySymbols(remarksVal);
     const isNegative = cleaned.startsWith('-') || cleaned.startsWith('(');
     const absCleaned = cleaned.replace(/[-()]/g, '').trim();
     const numVal = parseFloat(absCleaned.replace(/,/g, ''));
 
     const formatted = isNaN(numVal)
-      ? absCleaned || '0.00'
-      : numVal.toLocaleString('en-PH', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
+      ? absCleaned || zeroStr
+      : numVal.toLocaleString(currency.locale, {
+          minimumFractionDigits: currency.decimals,
+          maximumFractionDigits: currency.decimals,
         });
 
     return (
       <div className="flex items-center justify-between w-full px-1 sm:px-1.5 lg:px-2.5 min-w-0">
         <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium opacity-90">
-          {isNegative ? '-₱' : '₱'}
+          {isNegative ? `-${currency.symbol}` : currency.symbol}
         </span>
         <span className="font-mono tabular-nums font-semibold text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">
           {formatted}
@@ -609,6 +636,118 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     () => effectiveColumnOrder.filter(canColumnMerge),
     [effectiveColumnOrder]
   );
+
+  // Capture current row Y positions prior to reorder for crisp FLIP motion
+  const captureRowRects = () => {
+    const tops: Record<string, number> = {};
+    for (const id of effectiveRowOrder) {
+      const el = rowElsRef.current[id];
+      if (el) {
+        tops[id] = el.getBoundingClientRect().top;
+      }
+    }
+    prevTopsRef.current = tops;
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (moveHighlightTimerRef.current) {
+        clearTimeout(moveHighlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  // FLIP vertical animation when rows are reordered + entrance animation for newly added rows
+  useLayoutEffect(() => {
+    const isSheetSwitch = prevSheetIdRef.current !== monthData.id;
+    prevSheetIdRef.current = monthData.id;
+
+    const currentSet = new Set(effectiveRowOrder);
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (isSheetSwitch) {
+      prevTopsRef.current = {};
+      prevRowSetRef.current = currentSet;
+      return;
+    }
+
+    if (prevRowSetRef.current) {
+      const added = new Set<RowId>();
+      for (const id of effectiveRowOrder) {
+        if (!prevRowSetRef.current.has(id) && rows[id]) {
+          added.add(id);
+        }
+      }
+      if (added.size > 0) {
+        setNewlyAddedRowIds(added);
+        setTimeout(() => {
+          setNewlyAddedRowIds(new Set());
+        }, 350);
+      }
+    }
+    prevRowSetRef.current = currentSet;
+
+    const nextTops: Record<string, number> = {};
+    const movedEls: Array<{ el: HTMLTableRowElement; deltaY: number }> = [];
+
+    for (const id of effectiveRowOrder) {
+      const el = rowElsRef.current[id];
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top;
+      nextTops[id] = top;
+      const prevTop = prevTopsRef.current[id];
+      if (!prefersReducedMotion && prevTop !== undefined) {
+        const deltaY = prevTop - top;
+        if (Math.abs(deltaY) > 1) {
+          movedEls.push({ el, deltaY });
+        }
+      }
+    }
+
+    if (movedEls.length > 0) {
+      movedEls.forEach(({ el, deltaY }) => {
+        el.style.transition = 'none';
+        el.style.transform = `translateY(${deltaY}px)`;
+      });
+      // Force layout reflow so browser commits starting transforms
+      void movedEls[0].el.getBoundingClientRect();
+      requestAnimationFrame(() => {
+        movedEls.forEach(({ el }) => {
+          el.style.transition = 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)';
+          el.style.transform = 'translateY(0)';
+        });
+      });
+    }
+
+    prevTopsRef.current = nextTops;
+  }, [effectiveRowOrder, monthData.id, rows]);
+
+  const handleMoveRow = (fromIdx: number, toIdx: number) => {
+    if (!onReorderRows) return;
+    if (
+      fromIdx < 0 ||
+      toIdx < 0 ||
+      fromIdx >= effectiveRowOrder.length ||
+      toIdx >= effectiveRowOrder.length ||
+      fromIdx === toIdx
+    ) {
+      return;
+    }
+    const movedId = effectiveRowOrder[fromIdx];
+    captureRowRects();
+    setRecentlyMovedRowId(movedId);
+    if (moveHighlightTimerRef.current) {
+      clearTimeout(moveHighlightTimerRef.current);
+    }
+    moveHighlightTimerRef.current = setTimeout(() => {
+      setRecentlyMovedRowId(null);
+      moveHighlightTimerRef.current = null;
+    }, 600);
+    onReorderRows(fromIdx, toIdx);
+  };
 
   const isDefaultFourColumns =
     effectiveColumnOrder.length === 4 &&
@@ -852,7 +991,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               </tr>
             </thead>
             <tbody>
-              {effectiveRowOrder.map((rowId) => {
+              {effectiveRowOrder.map((rowId, rowIdx) => {
                 const row = rows[rowId];
                 if (!row) return null;
 
@@ -931,9 +1070,87 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
 
                 const isLoanEmpty = isLoanRow && !row.label;
 
+                const isDraggingThisRow = draggedRowId === rowId;
+                const isDragOverAbove =
+                  dragOverState?.rowId === rowId && dragOverState.position === 'above';
+                const isDragOverBelow =
+                  dragOverState?.rowId === rowId && dragOverState.position === 'below';
+                const isRecentlyMoved = recentlyMovedRowId === rowId;
+                const isNewlyAdded = newlyAddedRowIds.has(rowId);
+                const canDragRow = Boolean(onReorderRows) && !editingCell && !editingLabelRowId;
+
                 return (
                   <React.Fragment key={rowId}>
-                    <tr className={`border-b border-slate-900 dark:border-slate-700 last:border-b-0 transition-colors ${rowBgClass}`}>
+                    <tr
+                      ref={(el) => {
+                        rowElsRef.current[rowId] = el;
+                      }}
+                      draggable={canDragRow}
+                      onDragStart={(e) => {
+                        if (!canDragRow) {
+                          e.preventDefault();
+                          return;
+                        }
+                        setDraggedRowId(rowId);
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', rowId);
+                      }}
+                      onDragOver={(e) => {
+                        if (!draggedRowId || draggedRowId === rowId) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const position: 'above' | 'below' =
+                          e.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+                        setDragOverState((prev) =>
+                          prev?.rowId === rowId && prev.position === position
+                            ? prev
+                            : { rowId, position }
+                        );
+                      }}
+                      onDragLeave={(e) => {
+                        const related = e.relatedTarget as Node | null;
+                        if (related && e.currentTarget.contains(related)) return;
+                        setDragOverState((prev) => (prev?.rowId === rowId ? null : prev));
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceId = draggedRowId || e.dataTransfer.getData('text/plain');
+                        if (!sourceId || sourceId === rowId) {
+                          setDraggedRowId(null);
+                          setDragOverState(null);
+                          return;
+                        }
+                        const fromIdx = effectiveRowOrder.indexOf(sourceId);
+                        const targetIdx = effectiveRowOrder.indexOf(rowId);
+                        const position = dragOverState?.rowId === rowId ? dragOverState.position : 'above';
+                        if (fromIdx !== -1 && targetIdx !== -1) {
+                          let toIdx =
+                            fromIdx < targetIdx
+                              ? position === 'above'
+                                ? targetIdx - 1
+                                : targetIdx
+                              : position === 'above'
+                              ? targetIdx
+                              : targetIdx + 1;
+                          toIdx = Math.max(0, Math.min(effectiveRowOrder.length - 1, toIdx));
+                          handleMoveRow(fromIdx, toIdx);
+                        }
+                        setDraggedRowId(null);
+                        setDragOverState(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedRowId(null);
+                        setDragOverState(null);
+                      }}
+                      className={`border-b border-slate-900 dark:border-slate-700 last:border-b-0 transition-colors duration-150 ${rowBgClass} ${
+                        isDraggingThisRow ? 'opacity-45 bg-emerald-50/40 dark:bg-emerald-950/30' : ''
+                      } ${isDragOverAbove ? 'shadow-[inset_0_3px_0_0_#10b981]' : ''} ${
+                        isDragOverBelow ? 'shadow-[inset_0_-3px_0_0_#10b981]' : ''
+                      } ${isRecentlyMoved ? 'pb-row-settled' : ''} ${
+                        isNewlyAdded ? 'pb-row-enter' : ''
+                      }`}
+                    >
                       {effectiveColumnOrder.map((colId, colIdx) => {
                         if (skipColIndices.has(colIdx)) {
                           return null;
@@ -966,7 +1183,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                               {renderModernNoteIndicator(row.labelNote, rowId, 'payments', `${row.label} (Payment)`)}
 
                               <div className="flex items-center justify-between gap-1">
-                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                <div className="flex items-center flex-1 min-w-0">
                                   {editingLabelRowId === rowId ? (
                                     <input
                                       type="text"
@@ -995,7 +1212,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                   ) : (
                                     <div
                                       className="flex items-center gap-1.5 flex-1 min-w-0"
-                                      title="Click to select payment item, or double-click / tap Edit in popup to rename"
+                                      title="Click to select payment item, drag row to reorder, or double-click to rename"
                                     >
                                       <span
                                         className={`truncate font-bold text-xs lg:text-sm xl:text-[15px] ${labelTextClass} ${
@@ -1015,7 +1232,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                       onOpenSalaryModal();
                                     }}
                                     title="Edit Base Salary + Previous Balance"
-                                    className="text-[9px] lg:text-xs text-white bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600 px-1.5 lg:px-2 py-0.5 rounded font-sans font-semibold shadow-2xs cursor-pointer transition-colors leading-none shrink-0"
+                                    className="text-[9px] lg:text-xs text-white bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600 px-1.5 lg:px-2 py-0.5 rounded font-sans font-semibold shadow-2xs cursor-pointer transition-colors leading-none shrink-0 ml-1"
                                   >
                                     Breakdown
                                   </button>
@@ -1080,7 +1297,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                 <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
                                   {isPrimaryCurrency && (
                                     <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">
-                                      ₱
+                                      {currencySymbolClean}
                                     </span>
                                   )}
                                   <input
@@ -1088,7 +1305,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                     autoFocus
                                     defaultValue={
                                       primaryCol === 'remarks' && rowId === 'metrobank'
-                                        ? (row.remarks || '').replace(/[₱PphpPHP]/g, '').trim()
+                                        ? stripCurrencySymbols(row.remarks || '')
                                         : primaryMeta.rawInput
                                     }
                                     placeholder={isPrimaryCurrency ? '0.00' : 'Enter value'}
@@ -1099,7 +1316,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                         onUpdateRemarks(
                                           rowId,
                                           rowId === 'metrobank'
-                                            ? e.target.value.replace(/[₱PphpPHP]/g, '').trim()
+                                            ? stripCurrencySymbols(e.target.value)
                                             : e.target.value
                                         );
                                       } else if (customPrimaryCol) {
@@ -1166,7 +1383,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
 
                               {isEditingMonthly && !row.readOnlyMonthly ? (
                                 <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
-                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">₱</span>
+                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">{currencySymbolClean}</span>
                                   <input
                                     type="text"
                                     autoFocus
@@ -1202,7 +1419,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
 
                               {isEditingKinsenas && !row.readOnly15th ? (
                                 <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
-                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">₱</span>
+                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">{currencySymbolClean}</span>
                                   <input
                                     type="text"
                                     autoFocus
@@ -1275,19 +1492,19 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                 <div className="w-full px-1">
                                   {isEditingRemarks ? (
                                     <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
-                                      <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">₱</span>
+                                      <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">{currencySymbolClean}</span>
                                       <input
                                         type="text"
                                         autoFocus
-                                        defaultValue={(row.remarks || '').replace(/[₱PphpPHP]/g, '').trim()}
+                                        defaultValue={stripCurrencySymbols(row.remarks || '')}
                                         placeholder="0.00"
                                         onBlur={(e) => {
-                                          onUpdateRemarks(rowId, e.target.value.replace(/[₱PphpPHP]/g, '').trim());
+                                          onUpdateRemarks(rowId, stripCurrencySymbols(e.target.value));
                                           setEditingCell(null);
                                         }}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') {
-                                            onUpdateRemarks(rowId, e.currentTarget.value.replace(/[₱PphpPHP]/g, '').trim());
+                                            onUpdateRemarks(rowId, stripCurrencySymbols(e.currentTarget.value));
                                             setEditingCell(null);
                                           }
                                         }}
@@ -1348,7 +1565,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                               <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
                                 {customCol.type === 'currency' && (
                                   <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">
-                                    ₱
+                                    {currencySymbolClean}
                                   </span>
                                 )}
                                 <input
@@ -1519,6 +1736,35 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                     <span>{activeMergeMatch ? 'Where' : 'Merge'}</span>
                   </button>
                 )}
+
+                {onReorderRows && (() => {
+                  const activeRowIndex = effectiveRowOrder.indexOf(activeCell.rowId);
+                  if (activeRowIndex === -1) return null;
+                  return (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={activeRowIndex === 0}
+                        onClick={() => handleMoveRow(activeRowIndex, activeRowIndex - 1)}
+                        className="p-1.5 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:pointer-events-none rounded-full text-slate-200 transition-colors cursor-pointer"
+                        title="Move Row Up"
+                        aria-label="Move Row Up"
+                      >
+                        <ArrowUp className="w-3 h-3 lg:w-3.5 lg:h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={activeRowIndex === effectiveRowOrder.length - 1}
+                        onClick={() => handleMoveRow(activeRowIndex, activeRowIndex + 1)}
+                        className="p-1.5 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:pointer-events-none rounded-full text-slate-200 transition-colors cursor-pointer"
+                        title="Move Row Down"
+                        aria-label="Move Row Down"
+                      >
+                        <ArrowDown className="w-3 h-3 lg:w-3.5 lg:h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {activeCell.column !== 'payments' && activeCell.currentInput && (
                   <button
@@ -1788,7 +2034,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs lg:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    Monthly Amount (₱)
+                    Monthly Amount ({currencySymbolClean})
                   </label>
                   <input
                     type="number"
@@ -1801,7 +2047,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs lg:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    15th / Kinsenas (₱)
+                    15th / Kinsenas ({currencySymbolClean})
                   </label>
                   <input
                     type="number"
@@ -2006,9 +2252,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             {item.label}
                           </div>
                           <div className="text-[10px] lg:text-xs text-slate-500 dark:text-slate-400 flex items-center gap-3 font-mono mt-0.5">
-                            <span>M: ₱{(item.monthlyVal || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                            <span>M: {formatCurrency(item.monthlyVal || 0)}</span>
                             <span>·</span>
-                            <span>15th: ₱{(item.cutoffVal || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                            <span>15th: {formatCurrency(item.cutoffVal || 0)}</span>
                           </div>
                         </div>
 
@@ -2183,8 +2429,8 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                   >
-                    <span className="font-mono">₱</span>
-                    <span>Currency (₱)</span>
+                    <span className="font-mono">{currencySymbolClean}</span>
+                    <span>Currency ({currencySymbolClean})</span>
                   </button>
                   <button
                     type="button"
@@ -2362,7 +2608,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   const typeLabel = isPayments
                     ? 'Primary Row Labels'
                     : customCol
-                    ? `Custom · ${customCol.type === 'currency' ? 'Currency (₱)' : 'Text'}`
+                    ? `Custom · ${customCol.type === 'currency' ? `Currency (${currencySymbolClean})` : 'Text'}`
                     : 'Standard Column';
 
                   return (

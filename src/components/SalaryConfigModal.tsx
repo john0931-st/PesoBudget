@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Check, Calculator, ArrowRight } from 'lucide-react';
 import { SalaryBreakdown } from '../types/budget';
 import { formatPHP } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface SalaryConfigModalProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
   cutoff15thSalary,
   onSave,
 }) => {
+  const { currency } = useCurrency();
+  const sym = currency.symbol.trim();
   const [monthlyBase, setMonthlyBase] = useState(monthlySalary.baseSalary.toString());
   const [monthlyPrev, setMonthlyPrev] = useState(monthlySalary.previousBalance.toString());
   const [monthlyNote, setMonthlyNote] = useState(monthlySalary.note || '');
@@ -92,7 +95,7 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">Base Monthly Salary (₱)</label>
+                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">Base Monthly Salary ({sym})</label>
                 <input
                   type="number"
                   value={monthlyBase}
@@ -102,7 +105,7 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">Previous Balance Carried (₱)</label>
+                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">Previous Balance Carried ({sym})</label>
                 <input
                   type="number"
                   value={monthlyPrev}
@@ -138,7 +141,7 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">15th Cutoff Base Pay (₱)</label>
+                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">15th Cutoff Base Pay ({sym})</label>
                 <input
                   type="number"
                   value={cutoffBase}
@@ -148,7 +151,7 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">15th Previous Balance (₱)</label>
+                <label className="block text-slate-600 dark:text-slate-300 mb-1 font-medium">15th Previous Balance ({sym})</label>
                 <input
                   type="number"
                   value={cutoffPrev}

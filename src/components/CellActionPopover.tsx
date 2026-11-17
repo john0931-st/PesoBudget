@@ -9,7 +9,8 @@
 
 import React from 'react';
 import { RowId, CellColumn } from '../types/budget';
-import { formatPHP } from '../utils/currency';
+import { formatCurrency } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import {
   Edit3,
   Trash2,
@@ -49,6 +50,7 @@ export const CellActionPopover: React.FC<CellActionPopoverProps> = ({
   onRemoveNote,
   onClose,
 }) => {
+  const { currency } = useCurrency();
   if (!isOpen || !cellInfo) return null;
 
   const colTitle =
@@ -77,7 +79,7 @@ export const CellActionPopover: React.FC<CellActionPopoverProps> = ({
         <div className="bg-slate-900 dark:bg-slate-950 text-white p-4 flex items-center justify-between shrink-0 border-b border-transparent dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-emerald-400">
-              ₱
+              {currency.symbol.trim()}
             </div>
             <div>
               <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -105,7 +107,7 @@ export const CellActionPopover: React.FC<CellActionPopoverProps> = ({
             <div className="text-base font-bold font-mono text-slate-900 dark:text-slate-100">
               {cellInfo.column === 'remarks' || cellInfo.column === 'payments'
                 ? cellInfo.rawInput || '—'
-                : formatPHP(cellInfo.value)}
+                : formatCurrency(cellInfo.value)}
             </div>
             {cellInfo.rawInput && cellInfo.rawInput.startsWith('=') && (
               <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400 block">
@@ -168,7 +170,7 @@ export const CellActionPopover: React.FC<CellActionPopoverProps> = ({
               <div className="text-left">
                 <div className="text-xs font-bold">Delete Value</div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Clear field and reset to ₱0.00
+                  Clear field and reset to {formatCurrency(0)}
                 </div>
               </div>
             </div>

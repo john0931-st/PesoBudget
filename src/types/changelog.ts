@@ -5,6 +5,7 @@ export type ChangeLogAction =
   | 'remarks_change'
   | 'item_add'
   | 'item_remove'
+  | 'row_reorder'
   | 'sheet_create'
   | 'sheet_rename'
   | 'sheet_duplicate'

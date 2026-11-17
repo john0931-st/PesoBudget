@@ -1,6 +1,6 @@
 import { MonthData } from '../types/budget';
 import { INITIAL_ROW_ORDER } from './storage';
-import { formatPHP } from './currency';
+import { getActiveCurrencyConfig } from './currency';
 import { computeOverallWorkbookData, groupSheetsByCalendarMonth } from './monthGrouping';
 
 /**
@@ -8,6 +8,7 @@ import { computeOverallWorkbookData, groupSheetsByCalendarMonth } from './monthG
  */
 export function exportMonthToCSV(month: MonthData): void {
   const rows = month.rows;
+  const currencyCode = getActiveCurrencyConfig().code;
   const lines: string[] = [];
 
   // Title
@@ -16,10 +17,13 @@ export function exportMonthToCSV(month: MonthData): void {
   lines.push('');
 
   // Table Headers
-  lines.push('"Payments","Monthly (PHP)","15th (PHP)","Remarks","Notes"');
+  lines.push(`"Payments","Monthly (${currencyCode})","15th (${currencyCode})","Remarks","Notes"`);
 
   // Rows
-  for (const rowId of INITIAL_ROW_ORDER) {
+  const orderedIds = month.rowOrder && month.rowOrder.length > 0
+    ? Array.from(new Set([...month.rowOrder, ...Object.keys(rows)]))
+    : INITIAL_ROW_ORDER;
+  for (const rowId of orderedIds) {
     const row = rows[rowId];
     if (!row) continue;
 
@@ -56,15 +60,19 @@ export function exportMonthToCSV(month: MonthData): void {
  * Exports ALL months (January to Present) to a consolidated multi-month CSV
  */
 export function exportAllMonthsToCSV(months: Record<string, MonthData>): void {
+  const currencyCode = getActiveCurrencyConfig().code;
   const lines: string[] = [];
-  lines.push('"Month","Payments","Monthly (PHP)","15th (PHP)","Remarks","Notes"');
+  lines.push(`"Month","Payments","Monthly (${currencyCode})","15th (${currencyCode})","Remarks","Notes"`);
 
   // Sort months chronologically if possible
   const monthList = Object.values(months);
 
   for (const month of monthList) {
     const rows = month.rows;
-    for (const rowId of INITIAL_ROW_ORDER) {
+    const orderedIds = month.rowOrder && month.rowOrder.length > 0
+      ? Array.from(new Set([...month.rowOrder, ...Object.keys(rows)]))
+      : INITIAL_ROW_ORDER;
+    for (const rowId of orderedIds) {
       const row = rows[rowId];
       if (!row) continue;
 
@@ -99,7 +107,7 @@ export function exportAllMonthsToJSON(months: Record<string, MonthData>): void {
   const payload = {
     version: '1.0',
     exportedAt: new Date().toISOString(),
-    currency: 'PHP',
+    currency: getActiveCurrencyConfig().code,
     monthsCount: Object.keys(months).length,
     months,
   };
@@ -147,8 +155,9 @@ export function downloadJanuaryToPresentTemplate(): void {
     'Gotyme',
   ];
 
+  const currencyCode = getActiveCurrencyConfig().code;
   const lines: string[] = [];
-  lines.push('"Month","Payments","Monthly (PHP)","15th (PHP)","Remarks","Notes"');
+  lines.push(`"Month","Payments","Monthly (${currencyCode})","15th (${currencyCode})","Remarks","Notes"`);
 
   for (const m of months) {
     for (const label of standardLabels) {
@@ -173,6 +182,7 @@ export function exportSummaryToCSV(months: Record<string, MonthData>): void {
   const combined = computeOverallWorkbookData(months);
   const grouped = groupSheetsByCalendarMonth(months);
   const historical = Object.values(grouped);
+  const currencyCode = getActiveCurrencyConfig().code;
   const lines: string[] = [];
 
   lines.push('"PESOBUDGET - OVERALL FINANCIAL SUMMARY & ANALYTICS REPORT"');
@@ -181,7 +191,7 @@ export function exportSummaryToCSV(months: Record<string, MonthData>): void {
   lines.push('');
 
   lines.push('"PAGE 1: OVERALL FINANCIAL SNAPSHOT & KEY METRICS"');
-  lines.push('"Metric","Amount (PHP)","Description"');
+  lines.push(`"Metric","Amount (${currencyCode})","Description"`);
   lines.push(`"Total Monthly Bills","${Math.abs(combined.totalExpenses).toFixed(2)}","House, utilities, loans & Lazada"`);
   lines.push(`"Metrobank ATM Cash","${combined.plannedMetrobank.toFixed(2)}","Physical cash withdrawn for bills"`);
   lines.push(`"QR PH Digital Transfer","${combined.plannedQrPh.toFixed(2)}","Digital payments for Lazada/Shopee"`);
@@ -194,14 +204,14 @@ export function exportSummaryToCSV(months: Record<string, MonthData>): void {
   lines.push('');
 
   lines.push('"PAGE 2: PAYROLL SETTLEMENT & CUTOFF ANALYSIS"');
-  lines.push('"Cutoff Sheet","Expenses (PHP)","Salary (PHP)","MP2 Savings (PHP)","Personal Savings (PHP)","Ending Balance (PHP)"');
+  lines.push(`"Cutoff Sheet","Expenses (${currencyCode})","Salary (${currencyCode})","MP2 Savings (${currencyCode})","Personal Savings (${currencyCode})","Ending Balance (${currencyCode})"`);
   combined.cutoffSummaries.forEach((cs) => {
     lines.push(`"${cs.name}","${cs.expenses.toFixed(2)}","${cs.salary.toFixed(2)}","${cs.govSavings.toFixed(2)}","${cs.personalSavings.toFixed(2)}","${cs.endingBalance.toFixed(2)}"`);
   });
   lines.push('');
 
   lines.push('"PAGE 3: EXPENSE CATEGORY BREAKDOWN"');
-  lines.push('"Category","Amount (PHP)","Share of Total Bills (%)"');
+  lines.push(`"Category","Amount (${currencyCode})","Share of Total Bills (%)"`);
   combined.expenseCategories.forEach((cat) => {
     const pct = combined.totalExpenses > 0 ? (cat.amount / combined.totalExpenses) * 100 : 0;
     lines.push(`"${cat.label}","${cat.amount.toFixed(2)}","${pct.toFixed(1)}%"`);
@@ -209,14 +219,14 @@ export function exportSummaryToCSV(months: Record<string, MonthData>): void {
   lines.push('');
 
   lines.push('"PAGE 4: CASH FLOW (ATM CASH VS DIGITAL)"');
-  lines.push('"Channel","Amount (PHP)","Description"');
+  lines.push(`"Channel","Amount (${currencyCode})","Description"`);
   lines.push(`"Metrobank ATM Cash","${combined.plannedMetrobank.toFixed(2)}","Physical cash withdrawal"`);
   lines.push(`"QR PH Digital Transfer","${combined.plannedQrPh.toFixed(2)}","InstaPay / QR digital payments"`);
   lines.push(`"Total Disbursed","${(combined.plannedMetrobank + combined.plannedQrPh).toFixed(2)}","Sum of all disbursements"`);
   lines.push('');
 
   lines.push('"PAGE 5: EXECUTIVE SAVINGS & STASH BREAKDOWN"');
-  lines.push('"Savings Vehicle","Amount (PHP)","Category","Liquidity"');
+  lines.push(`"Savings Vehicle","Amount (${currencyCode})","Category","Liquidity"`);
   lines.push(`"Pag-IBIG MP2 Government","${Math.abs(combined.governmentSavings).toFixed(2)}","Government Sovereign Fund","5-Year Maturity"`);
   lines.push(`"GoTyme Stash","${combined.gotymeVal.toFixed(2)}","Personal Bank","Immediate Liquid"`);
   lines.push(`"Payroll Ending Balance","${combined.balanceVal.toFixed(2)}","Operating Surplus","Immediate Liquid"`);
@@ -225,7 +235,7 @@ export function exportSummaryToCSV(months: Record<string, MonthData>): void {
   lines.push('');
 
   lines.push('"PAGE 6: CASH FLOW WATERFALL & NET POSITION"');
-  lines.push('"Flow Item","Amount (PHP)","Net Effect"');
+  lines.push(`"Flow Item","Amount (${currencyCode})","Net Effect"`);
   lines.push(`"(+) Total Annual Salary","${combined.salaryVal.toFixed(2)}","Inflow"`);
   lines.push(`"(-) Metrobank & QR PH Bills","${(-Math.abs(combined.totalExpenses)).toFixed(2)}","Outflow"`);
   lines.push(`"(-) Pag-IBIG MP2 Government Savings","${(-Math.abs(combined.governmentSavings)).toFixed(2)}","Savings Allocation"`);
@@ -233,7 +243,7 @@ export function exportSummaryToCSV(months: Record<string, MonthData>): void {
   lines.push('');
 
   lines.push('"PAGE 7: MULTI-MONTH HISTORICAL PROGRESSION"');
-  lines.push('"Calendar Month","Total Bills (PHP)","Salary (PHP)","Pag-IBIG MP2 (PHP)","Personal Savings (PHP)","Ending Balance (PHP)"');
+  lines.push(`"Calendar Month","Total Bills (${currencyCode})","Salary (${currencyCode})","Pag-IBIG MP2 (${currencyCode})","Personal Savings (${currencyCode})","Ending Balance (${currencyCode})"`);
   historical.forEach((hm) => {
     lines.push(`"${hm.displayName}","${hm.totalExpenses.toFixed(2)}","${hm.salaryVal.toFixed(2)}","${hm.governmentSavings.toFixed(2)}","${hm.personalSavings.toFixed(2)}","${hm.balanceVal.toFixed(2)}"`);
   });

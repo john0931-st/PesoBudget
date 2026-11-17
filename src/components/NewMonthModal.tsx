@@ -12,7 +12,8 @@
 
 import React, { useState } from 'react';
 import { X, Calendar, Copy, Sparkles, Check, DollarSign, Layers } from 'lucide-react';
-import { formatPHP } from '../utils/currency';
+import { formatCurrency } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import { isSharedPublicDeployment } from '../utils/storage';
 
 interface NewMonthModalProps {
@@ -52,6 +53,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
   availableYears = [2024, 2025, 2026, 2027, 2028],
   onConfirm,
 }) => {
+  useCurrency();
   const [selectedMonth, setSelectedMonth] = useState('January');
   const [selectedYear, setSelectedYear] = useState<string>(String(initialYear || 2026));
   const [customYearInput, setCustomYearInput] = useState('');
@@ -337,7 +339,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                 <div className="text-slate-500 dark:text-slate-400 mt-1 leading-relaxed text-[11px] lg:text-xs">
                   All expense cells start empty. Formula rows (Metrobank, Total, Balance) are preserved, and Salary equals{' '}
                   <strong className="text-slate-700 dark:text-slate-200">
-                    {includePreviousBalance ? 'previous balance + current salary' : 'current salary only (₱0.00 previous balance)'}
+                    {includePreviousBalance ? 'previous balance + current salary' : `current salary only (${formatCurrency(0)} previous balance)`}
                   </strong>.
                 </div>
 
@@ -362,7 +364,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                       >
                         <span className="truncate">Carry Prev. Balance</span>
                         <span className="font-mono text-[10px] opacity-90 shrink-0">
-                          {formatPHP(carriedBalanceKinsenas)}
+                          {formatCurrency(carriedBalanceKinsenas)}
                         </span>
                       </button>
                       <button
@@ -375,7 +377,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                         }`}
                       >
                         <span className="truncate">No Previous Balance</span>
-                        <span className="font-mono text-[10px] opacity-90 shrink-0">₱0.00</span>
+                        <span className="font-mono text-[10px] opacity-90 shrink-0">{formatCurrency(0)}</span>
                       </button>
                     </div>
                   </div>
@@ -425,7 +427,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                   Previous Balance:
                 </label>
                 <div className="font-mono font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded flex items-center justify-between gap-1">
-                  <span>{formatPHP(effectiveCarriedBalanceKinsenas)}</span>
+                  <span>{formatCurrency(effectiveCarriedBalanceKinsenas)}</span>
                   {!copyCurrent && !includePreviousBalance && (
                     <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400">No carryover</span>
                   )}
@@ -452,7 +454,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                 Total Starting Salary:
               </span>
               <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                {formatPHP(totalStartingSalaryKinsenas)}
+                {formatCurrency(totalStartingSalaryKinsenas)}
               </span>
             </div>
           </div>

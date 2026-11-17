@@ -27,8 +27,11 @@ export function evaluateFormulaInput(rawInput: string): FormulaEvalResult {
   const isFormula = trimmed.startsWith('=');
   let expression = isFormula ? trimmed.slice(1).trim() : trimmed;
 
-  // Clean expression: remove Philippine Peso symbols and thousand commas
-  expression = expression.replace(/[₱PphpPHP,]/g, '').trim();
+  // Clean expression: remove currency symbols and thousand commas
+  expression = expression
+    .replace(/(?:S\$|A\$|C\$|PHP|USD|EUR|GBP|JPY|SGD|AUD|CAD|KRW|AED)/gi, '')
+    .replace(/[₱$€£¥₩Pphp,]/g, '')
+    .trim();
 
   if (!expression) {
     return {

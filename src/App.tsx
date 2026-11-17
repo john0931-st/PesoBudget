@@ -32,7 +32,8 @@ import {
 import { recalculateMonthData } from './utils/computation';
 import { evaluateFormulaInput } from './utils/formula';
 import { exportMonthToExcel } from './utils/excelService';
-import { formatPHP } from './utils/currency';
+import { formatPHP, formatCurrency, SUPPORTED_CURRENCIES } from './utils/currency';
+import { useCurrency } from './hooks/useCurrency';
 import { extractMonthKey } from './utils/monthGrouping';
 import {
   getSecurityProfile,
@@ -43,7 +44,7 @@ import {
 import { auth } from './firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 
-import { TopNav } from './components/TopNav';
+import { TopNav, SaveSyncActivity } from './components/TopNav';
 import { BudgetTable } from './components/BudgetTable';
 import { MonthSheetTabs } from './components/MonthSheetTabs';
 import { DataVisualization } from './components/DataVisualization';
@@ -94,6 +95,7 @@ import {
   Check,
   AlertCircle,
   Trash2,
+  Globe,
 } from 'lucide-react';
 
 const SEEN_RELEASE_BUILD_KEY = 'pesobudget_seen_build_id_v1';
@@ -115,6 +117,7 @@ const LATEST_RELEASE: ReleaseNoteEntry = RELEASE_NOTES[0] || {
 };
 
 export default function App() {
+  const { currencyCode, currency, setCurrency } = useCurrency();
   const [months, setMonths] = useState<Record<string, MonthData>>(() => loadSavedMonths());
   const [activeMonthId, setActiveMonthIdState] = useState<string>(() => getActiveMonthId());
   const [activeTab, setActiveTab] = useState<ActiveTab>('sheet');
@@ -379,7 +382,7 @@ export default function App() {
   }, []);
 
   // Automated continuous Firebase Cloud sync and auto-restore hook
-  const { autoSyncNotice, clearNotice } = useAutoBackup({
+  const { autoSyncNotice, isSyncingFirebase, clearNotice } = useAutoBackup({
     months,
     securityProfile,
     firebaseUid: firebaseUser?.uid || null,
@@ -391,6 +394,36 @@ export default function App() {
     },
     onRestoreMonths: handleRestoreMonthsFromSync,
   });
+
+  // Track brief local storage & local folder auto-save activity for TopNav indicator
+  const [isSavingLocal, setIsSavingLocal] = useState(false);
+  const [isSavingFolder, setIsSavingFolder] = useState(false);
+  const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (localSaveTimerRef.current) {
+        clearTimeout(localSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerLocalSaveIndicator = useCallback(() => {
+    setIsSavingLocal(true);
+    if (localSaveTimerRef.current) {
+      clearTimeout(localSaveTimerRef.current);
+    }
+    localSaveTimerRef.current = setTimeout(() => {
+      setIsSavingLocal(false);
+      localSaveTimerRef.current = null;
+    }, 900);
+  }, []);
+
+  const saveSyncActivity: SaveSyncActivity = isSyncingFirebase
+    ? 'syncing-firebase'
+    : isSavingLocal || isSavingFolder
+    ? 'saving-local'
+    : 'idle';
 
   // Ensure current month exists or fallback
   const currentMonth: MonthData =
@@ -452,17 +485,29 @@ export default function App() {
   // Auto-save organized JSON files to connected PesoBudget/data/ folder on edits
   useEffect(() => {
     if (!connectedDataFolder || !isFolderAutoSyncArmed()) return;
+    let isCancelled = false;
     const timer = setTimeout(() => {
+      if (isCancelled) return;
+      setIsSavingFolder(true);
       void writeSnapshotToConnectedFolder({
         months,
         years: availableYears,
         securityProfile,
         activeMonthId,
-      }).catch((err) => {
-        console.warn('Could not sync to connected data/ folder:', err);
-      });
+      })
+        .catch((err) => {
+          console.warn('Could not sync to connected data/ folder:', err);
+        })
+        .finally(() => {
+          if (!isCancelled) {
+            setIsSavingFolder(false);
+          }
+        });
     }, 350);
-    return () => clearTimeout(timer);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
   }, [connectedDataFolder, months, availableYears, securityProfile, activeMonthId]);
 
   // Loading screen state for modern year switching (5 seconds as requested)
@@ -475,6 +520,8 @@ export default function App() {
   const [yearActionError, setYearActionError] = useState<string | null>(null);
   const [confirmDeleteYear, setConfirmDeleteYear] = useState<number | null>(null);
   const yearDropdownRef = useRef<HTMLDivElement>(null);
+  const [isCurrencyMenuOpen, setIsCurrencyMenuOpen] = useState(false);
+  const currencyDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close Year dropdown menu on outside click
   useEffect(() => {
@@ -492,6 +539,21 @@ export default function App() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isYearDropdownOpen]);
+
+  // Close Currency dropdown menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (currencyDropdownRef.current && !currencyDropdownRef.current.contains(e.target as Node)) {
+        setIsCurrencyMenuOpen(false);
+      }
+    };
+    if (isCurrencyMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCurrencyMenuOpen]);
 
   // When user selects a year from dropdown beside Add Sheet:
   // Shows a 5-second modern loading screen and loads the sheets under the selected year
@@ -558,6 +620,7 @@ export default function App() {
   const persistMonths = useCallback((updated: Record<string, MonthData>) => {
     setMonths(updated);
     saveAllMonths(updated);
+    triggerLocalSaveIndicator();
     if (isOnline && securityProfile.isAuthenticated && securityProfile.email) {
       try {
         const { updatedProfile } = createGoogleCloudBackup(updated, securityProfile);
@@ -567,7 +630,7 @@ export default function App() {
         console.error('Immediate Google sync error:', e);
       }
     }
-  }, [isOnline, securityProfile]);
+  }, [isOnline, securityProfile, triggerLocalSaveIndicator]);
 
   const handleSelectMonth = (monthId: string) => {
     const target = months[monthId];
@@ -941,7 +1004,7 @@ export default function App() {
         action: 'item_add',
         actionLabel: 'Item Added',
         rowLabel: label.trim() || 'New Payment',
-        newValue: `Monthly: ₱${monthlyVal.toFixed(2)}, 15th: ₱${kinsenasVal.toFixed(2)}`,
+        newValue: `Monthly: ${formatCurrency(monthlyVal)}, 15th: ${formatCurrency(kinsenasVal)}`,
         description: `Added new payment line item "${label.trim() || 'New Payment'}"`,
       });
 
@@ -951,7 +1014,7 @@ export default function App() {
           sheetName: targetMonth.name,
           year: targetMonth.year || selectedYear,
           rowLabel: label.trim() || 'New Payment',
-          newValue: `Monthly: ₱${monthlyVal.toFixed(2)}, 15th: ₱${kinsenasVal.toFixed(2)}`,
+          newValue: `Monthly: ${formatCurrency(monthlyVal)}, 15th: ${formatCurrency(kinsenasVal)}`,
           description: `Added new payment line item "${label.trim() || 'New Payment'}"`,
         });
       }
@@ -1004,6 +1067,75 @@ export default function App() {
           year: targetMonth.year || selectedYear,
           rowLabel: itemLabel,
           description: `Removed payment line item "${itemLabel}"`,
+        });
+      }
+    },
+    [months, activeMonthId, currentMonth, persistMonths, selectedYear, isOnline]
+  );
+
+  // Manually reorder expense/payment rows via drag-and-drop or up/down arrow buttons
+  const handleReorderRows = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const targetMonth = months[activeMonthId] || currentMonth;
+      if (!targetMonth) return;
+
+      const baseOrder =
+        targetMonth.rowOrder && targetMonth.rowOrder.length > 0
+          ? targetMonth.rowOrder
+          : INITIAL_ROW_ORDER;
+      const seen = new Set(baseOrder);
+      const extraKeys = Object.keys(targetMonth.rows || {}).filter((k) => !seen.has(k));
+      const fullOrder = [...baseOrder, ...extraKeys].filter((id) => Boolean(targetMonth.rows?.[id]));
+
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= fullOrder.length ||
+        toIndex >= fullOrder.length
+      ) {
+        return;
+      }
+
+      const nextOrder = [...fullOrder];
+      const [movedRowId] = nextOrder.splice(fromIndex, 1);
+      nextOrder.splice(toIndex, 0, movedRowId);
+
+      const movedLabel = targetMonth.rows[movedRowId]?.label || movedRowId;
+      const direction = toIndex < fromIndex ? 'up' : 'down';
+
+      const updatedMonth: MonthData = {
+        ...targetMonth,
+        rowOrder: nextOrder,
+      };
+
+      const recalculated = recalculateMonthData(updatedMonth);
+      const updatedMonths = {
+        ...months,
+        [activeMonthId]: recalculated,
+      };
+      persistMonths(updatedMonths);
+
+      addChangeLog({
+        sheetName: targetMonth.name,
+        year: targetMonth.year || selectedYear,
+        action: 'row_reorder',
+        actionLabel: 'Row Reordered',
+        rowLabel: movedLabel,
+        oldValue: `Position #${fromIndex + 1}`,
+        newValue: `Position #${toIndex + 1}`,
+        description: `Moved "${movedLabel}" ${direction} from row #${fromIndex + 1} to #${toIndex + 1}`,
+      });
+
+      if (!isOnline) {
+        addOfflineChange({
+          action: 'row_reorder',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          rowLabel: movedLabel,
+          oldValue: `Position #${fromIndex + 1}`,
+          newValue: `Position #${toIndex + 1}`,
+          description: `Moved "${movedLabel}" ${direction} from row #${fromIndex + 1} to #${toIndex + 1}`,
         });
       }
     },
@@ -1995,6 +2127,7 @@ export default function App() {
           onOpenSyncModal={() => setIsSyncModalOpen(true)}
           theme={theme}
           onToggleTheme={handleToggleTheme}
+          saveSyncActivity={saveSyncActivity}
         />
       </div>
 
@@ -2303,6 +2436,102 @@ export default function App() {
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
               <span>Import / Export / Print</span>
             </button>
+
+            <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">·</span>
+
+            {/* International Currency Toggle */}
+            <div ref={currencyDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsCurrencyMenuOpen((prev) => !prev)}
+                aria-expanded={isCurrencyMenuOpen}
+                aria-haspopup="listbox"
+                title={`Display currency: ${currency.name} (${currency.code})`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-700 rounded-lg transition-colors cursor-pointer shadow-2xs"
+              >
+                <Globe className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                  {currency.symbol.trim()} {currency.code}
+                </span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-500 dark:text-slate-400 transition-transform duration-150 ${
+                    isCurrencyMenuOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {isCurrencyMenuOpen && (
+                <div className="absolute left-0 mt-1.5 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-2 z-50">
+                  <div className="px-3 pb-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      Display Currency
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-4 gap-1">
+                      {(['PHP', 'USD', 'EUR', 'GBP'] as const).map((quickCode) => {
+                        const quickCfg = SUPPORTED_CURRENCIES.find((c) => c.code === quickCode);
+                        if (!quickCfg) return null;
+                        const active = currencyCode === quickCode;
+                        return (
+                          <button
+                            key={quickCode}
+                            type="button"
+                            onClick={() => {
+                              setCurrency(quickCode);
+                              setIsCurrencyMenuOpen(false);
+                            }}
+                            className={`px-1.5 py-1 rounded-md text-[11px] font-mono font-bold border transition-colors cursor-pointer ${
+                              active
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }`}
+                          >
+                            {quickCfg.symbol.trim()} {quickCfg.code}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto px-1 space-y-0.5" role="listbox">
+                    {SUPPORTED_CURRENCIES.map((item) => {
+                      const active = currencyCode === item.code;
+                      return (
+                        <button
+                          key={item.code}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onClick={() => {
+                            setCurrency(item.code);
+                            setIsCurrencyMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold'
+                              : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="inline-flex items-center justify-center w-8 px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200 shrink-0">
+                              {item.symbol.trim()}
+                            </span>
+                            <div className="text-left truncate">
+                              <span className="font-mono font-bold mr-1.5">{item.code}</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-normal">
+                                {item.name}
+                              </span>
+                            </div>
+                          </div>
+                          {active && (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Quick Real-Time Metrics Strip (Tabular figures) */}
@@ -2311,7 +2540,7 @@ export default function App() {
               <CreditCard className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-blue-600 dark:text-blue-400" />
               <span className="text-[11px] lg:text-xs xl:text-sm">METROBANK:</span>
               <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                {hasDataForSelectedYear ? formatPHP(metroKinsenas) : '₱0.00'}
+                {hasDataForSelectedYear ? formatPHP(metroKinsenas) : formatCurrency(0)}
               </span>
             </div>
 
@@ -2321,7 +2550,7 @@ export default function App() {
               <TrendingUp className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-rose-600 dark:text-rose-400" />
               <span className="text-[11px] lg:text-xs xl:text-sm">Salary:</span>
               <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">
-                {hasDataForSelectedYear ? formatPHP(salaryKinsenas) : '₱0.00'}
+                {hasDataForSelectedYear ? formatPHP(salaryKinsenas) : formatCurrency(0)}
               </span>
             </div>
 
@@ -2337,7 +2566,7 @@ export default function App() {
                 }`}
                 title="Formula: (Salary - Total) - (MP2 + Gotyme)"
               >
-                {hasDataForSelectedYear ? formatPHP(balanceKinsenas) : '₱0.00'}
+                {hasDataForSelectedYear ? formatPHP(balanceKinsenas) : formatCurrency(0)}
               </span>
             </div>
           </div>
@@ -2404,6 +2633,7 @@ export default function App() {
                   onUpdateCustomColumnLabel={handleUpdateCustomColumnLabel}
                   onMergeRowCells={handleMergeRowCells}
                   onUnmergeRowCells={handleUnmergeRowCells}
+                  onReorderRows={handleReorderRows}
                 />
               </div>
             ) : (

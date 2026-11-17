@@ -19,6 +19,7 @@ import { getStoredPortableLock, type PortableLockMetadata } from '../utils/porta
 import { downloadBudgetPdf, printBudgetDirectly } from '../utils/printService';
 import { PasswordConfirmModal } from './PasswordConfirmModal';
 import { ActionMessageModal, type ActionMessageVariant } from './ActionMessageModal';
+import { useCurrency } from '../hooks/useCurrency';
 import {
   X,
   Upload,
@@ -58,6 +59,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   onImportSuccess,
   onTriggerPrint,
 }) => {
+  const { currency } = useCurrency();
   // All hooks must be defined unconditionally at the top of the component
   const [activeTab, setActiveTab] = useState<'export' | 'print' | 'import' | 'template'>('export');
   const [pastedText, setPastedText] = useState('');
@@ -427,7 +429,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-slate-800 text-white flex items-center justify-center font-bold text-sm lg:text-base shadow-xs border border-transparent dark:border-slate-700">
-              ₱
+              {currency.symbol.trim()}
             </div>
             <div>
               <h2 className="text-sm lg:text-base font-bold text-slate-900 dark:text-slate-100">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { RowId, CellColumn, MonthData } from '../types/budget';
 import { evaluateFormulaInput } from '../utils/formula';
 import { formatPHP, parseNumericString } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import { isSharedPublicDeployment } from '../utils/storage';
 import {
   FunctionSquare,
@@ -35,6 +36,7 @@ export const EditFormulaModal: React.FC<EditFormulaModalProps> = ({
   onApplyFormula,
   onOpenSalaryModal,
 }) => {
+  useCurrency();
   const targetCol = column === 'monthly' ? 'monthly' : 'cutoff15th';
   const row = monthData.rows[rowId];
   const currentCell = row?.[targetCol];

@@ -1,7 +1,9 @@
 import React from 'react';
 import { ActiveTab, UserSecurityProfile } from '../types/budget';
-import { Settings, Wifi, WifiOff, Sun, Moon } from 'lucide-react';
+import { Settings, Wifi, WifiOff, Sun, Moon, HardDrive, RefreshCw } from 'lucide-react';
 import { ThemeMode } from '../utils/theme';
+
+export type SaveSyncActivity = 'idle' | 'saving-local' | 'syncing-firebase';
 
 interface TopNavProps {
   activeTab: ActiveTab;
@@ -16,6 +18,7 @@ interface TopNavProps {
   onOpenSyncModal?: () => void;
   theme?: ThemeMode;
   onToggleTheme?: () => void;
+  saveSyncActivity?: SaveSyncActivity;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -27,6 +30,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenSyncModal,
   theme = 'light',
   onToggleTheme,
+  saveSyncActivity = 'idle',
 }) => {
   const isDark = theme === 'dark';
 
@@ -91,8 +95,53 @@ export const TopNav: React.FC<TopNavProps> = ({
         </button>
       </nav>
 
-      {/* Zone 3: Theme Toggle + Online/Offline Indicator + Settings Gear on opposite end of app title */}
+      {/* Zone 3: Auto-Save / Firebase Sync Indicator + Theme Toggle + Online/Offline + Settings */}
       <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+        {/* Subtle Saving / Firebase Syncing Visual Indicator */}
+        {saveSyncActivity !== 'idle' && (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="save-sync-indicator"
+            title={
+              saveSyncActivity === 'syncing-firebase'
+                ? 'Syncing changes to Firebase...'
+                : 'Auto-saving changes to local storage...'
+            }
+            aria-label={
+              saveSyncActivity === 'syncing-firebase'
+                ? 'Syncing changes to Firebase'
+                : 'Auto-saving changes to local storage'
+            }
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-medium shrink-0 whitespace-nowrap transition-all ${
+              saveSyncActivity === 'syncing-firebase'
+                ? 'bg-sky-50/90 dark:bg-sky-950/60 border-sky-200 dark:border-sky-800/80 text-sky-700 dark:text-sky-300'
+                : 'bg-emerald-50/90 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300'
+            }`}
+          >
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  saveSyncActivity === 'syncing-firebase' ? 'bg-sky-400' : 'bg-emerald-400'
+                }`}
+              />
+              <span
+                className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
+                  saveSyncActivity === 'syncing-firebase' ? 'bg-sky-500' : 'bg-emerald-500'
+                }`}
+              />
+            </span>
+            {saveSyncActivity === 'syncing-firebase' ? (
+              <RefreshCw className="w-3 h-3 text-sky-600 dark:text-sky-400 animate-spin shrink-0" />
+            ) : (
+              <HardDrive className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            )}
+            <span className="hidden md:inline">
+              {saveSyncActivity === 'syncing-firebase' ? 'Syncing…' : 'Saving…'}
+            </span>
+          </div>
+        )}
+
         {/* Light / Dark Theme Toggle beside Online/Offline indicator */}
         {onToggleTheme && (
           <button

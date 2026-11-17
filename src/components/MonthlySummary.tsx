@@ -14,6 +14,7 @@ import {
 } from '../utils/monthGrouping';
 import { HistoricalProgressionChart } from './HistoricalProgressionChart';
 import { useTrackpadSwipe } from '../hooks/useTrackpadSwipe';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface MonthlySummaryProps {
   monthData: MonthData;
@@ -29,6 +30,7 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
   onSelectMonth,
 }) => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  useCurrency();
 
   // Compute Overall Workbook Summary (aggregating all sheets across all months)
   const combinedMonth: CombinedMonthData = useMemo(() => {
