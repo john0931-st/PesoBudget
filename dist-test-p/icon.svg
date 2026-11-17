@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#0f172a" />
+  <!-- subtle grid lines -->
+  <line x1="80" y1="180" x2="432" y2="180" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
+  <line x1="80" y1="270" x2="432" y2="270" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
+  <line x1="80" y1="360" x2="432" y2="360" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
+  <line x1="200" y1="100" x2="200" y2="412" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
+  <line x1="320" y1="100" x2="320" y2="412" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
+  <!-- Philippine Peso Glyph -->
+  <text x="256" y="320" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="220" text-anchor="middle" fill="#ffffff" letter-spacing="-2">₱</text>
+  <!-- Accent badge -->
+  <circle cx="390" cy="120" r="28" fill="#10b981" />
+  <circle cx="390" cy="120" r="14" fill="#facc15" />
+</svg>

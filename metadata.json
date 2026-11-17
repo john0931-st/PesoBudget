@@ -1,0 +1,6 @@
+{
+  "name": "PesoBudget - Smart Philippine Expense & Payroll Tracker",
+  "description": "Comprehensive Philippine Peso expense tracking spreadsheet with automated Metrobank/QR PH computations, Excel-style formula support, cell notes, and budget visualizations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

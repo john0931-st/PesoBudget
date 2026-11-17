@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .font-mono, [data-tabular] {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom scrollbar for spreadsheet view */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Hide scrollbar while preserving scrolling function */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Browser-chrome-safe popup bounds (respects top address bar, bottom nav bar & safe-area insets) */
+.pb-modal-backdrop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--pb-vp-top, 0px);
+  height: var(--pb-vp-height, 100dvh);
+  padding-top: max(var(--pb-safe-pad-top, 12px), env(safe-area-inset-top, 0px));
+  padding-bottom: max(var(--pb-safe-pad-bottom, 14px), env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
+}
+
+.pb-modal-card {
+  max-height: var(--pb-modal-max-h, calc(100dvh - 28px));
+}
+
+.pb-floating-bottom {
+  bottom: max(var(--pb-float-bottom, 16px), calc(env(safe-area-inset-bottom, 0px) + 12px));
+}
+
+.pb-top-toast {
+  top: max(calc(var(--pb-vp-top, 0px) + var(--pb-safe-pad-top, 12px)), calc(env(safe-area-inset-top, 0px) + 12px));
+}
+
+
+/* Professional Print and PDF Stylesheet */
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  html,
+  body,
+  #root,
+  #root > div {
+    color-scheme: light !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide navigation, action bars, bottom dock, modal popups, footer, and quick-action buttons during print */
+  header,
+  nav,
+  footer,
+  .no-print,
+  [data-no-print="true"],
+  .fixed,
+  button:not(.allow-print) {
+    display: none !important;
+  }
+
+  /* Make main container expand to natural page height */
+  main,
+  main div {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Ensure card shadows and backgrounds look crisp */
+  .shadow-xs, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  /* Preserve table borders and headers */
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "version": "2.4.0",
+    "date": "2026-11-16",
+    "title": "Modern Cell Fills, Dark Mode & Live Update Notices",
+    "changes": [
+      "Modernized cell fill colors for Total, Salary, Balance, QR PH, Metrobank, MP2, and GoTyme rows across Light and Dark modes.",
+      "Added a Light / Dark theme toggle beside the online/offline indicator with full dark mode styling across tables, charts, and modals.",
+      "Added a 'No Previous Balance' option when creating a new sheet using the Clean Default Template.",
+      "Adjusted popup and modal bounds to respect browser address bars and mobile navigation bars.",
+      "Removed pre-filled sample notes and added automatic release-change notices on the public web link when updates are published."
+    ]
+  }
+]

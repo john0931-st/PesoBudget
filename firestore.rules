@@ -1,0 +1,238 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable Zero-Trust primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Validation helper for /users/{userId}
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'email',
+          'displayName',
+          'autoBackupEnabled',
+          'autoRestoreEnabled',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'photoUrl',
+          'autoBackupEnabled',
+          'autoRestoreEnabled',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && isValidId(data.uid)
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.displayName is string
+        && data.displayName.size() <= 120
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500))
+        && data.autoBackupEnabled is bool
+        && data.autoRestoreEnabled is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation helper for /users/{userId}/sheets/{monthId}
+    function isValidBudgetSheet(data, userId, monthId) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'id',
+          'name',
+          'year',
+          'salaryBreakdown',
+          'rows',
+          'clientUpdatedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid',
+          'id',
+          'name',
+          'sheetTitle',
+          'year',
+          'rowOrder',
+          'salaryBreakdown',
+          'rows',
+          'columnHeaders',
+          'clientUpdatedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerUid is string
+        && data.ownerUid == request.auth.uid
+        && data.ownerUid == userId
+        && isValidId(data.ownerUid)
+        && data.id is string
+        && data.id == monthId
+        && data.id.size() <= 64
+        && isValidId(data.id)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 80
+        && (!('sheetTitle' in data) || (data.sheetTitle is string && data.sheetTitle.size() <= 120))
+        && data.year is number
+        && data.year >= 2000
+        && data.year <= 2100
+        && (!('rowOrder' in data) || (
+          data.rowOrder is list
+          && data.rowOrder.size() <= 100
+          && (data.rowOrder.size() == 0 || data.rowOrder[0] is string)
+        ))
+        && data.salaryBreakdown is map
+        && data.rows is map
+        && data.rows.size() <= 120
+        && (!('columnHeaders' in data) || data.columnHeaders is map)
+        && data.clientUpdatedAt is string
+        && data.clientUpdatedAt.size() >= 1
+        && data.clientUpdatedAt.size() <= 40
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation helper for /users/{userId}/backups/{backupId}
+    function isValidCloudBackup(data, userId, backupId) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'id',
+          'deviceInfo',
+          'monthsCount',
+          'data',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid',
+          'id',
+          'deviceInfo',
+          'monthsCount',
+          'version',
+          'data',
+          'createdAt'
+        ])
+        && data.ownerUid is string
+        && data.ownerUid == request.auth.uid
+        && data.ownerUid == userId
+        && isValidId(data.ownerUid)
+        && data.id is string
+        && data.id == backupId
+        && data.id.size() <= 80
+        && isValidId(data.id)
+        && data.deviceInfo is string
+        && data.deviceInfo.size() >= 1
+        && data.deviceInfo.size() <= 120
+        && data.monthsCount is number
+        && data.monthsCount >= 0
+        && data.monthsCount <= 240
+        && (!('version' in data) || (data.version is string && data.version.size() <= 32))
+        && data.data is map
+        && data.data.size() <= 120
+        && data.createdAt is timestamp;
+    }
+
+    // User Private Profile & Sync Settings
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'email',
+          'displayName',
+          'photoUrl',
+          'autoBackupEnabled',
+          'autoRestoreEnabled',
+          'updatedAt'
+        ]);
+      allow delete: if false;
+
+      // Real-time synced monthly budget sheets (subcollection under owner)
+      match /sheets/{monthId} {
+        allow get: if isValidId(userId) && isValidId(monthId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(monthId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidBudgetSheet(incoming(), userId, monthId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(monthId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidBudgetSheet(incoming(), userId, monthId)
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().id == existing().id
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'sheetTitle',
+            'year',
+            'rowOrder',
+            'salaryBreakdown',
+            'rows',
+            'columnHeaders',
+            'clientUpdatedAt',
+            'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(monthId) && isOwner(userId);
+      }
+
+      // Cloud Backup Snapshots (immutable point-in-time snapshots)
+      match /backups/{backupId} {
+        allow get: if isValidId(userId) && isValidId(backupId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(backupId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidCloudBackup(incoming(), userId, backupId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(backupId) && isOwner(userId);
+      }
+    }
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile and cloud sync preferences stored under /users/{userId}.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google account email address.",
+          "maxLength": 254
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name from Google account.",
+          "maxLength": 120
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Profile avatar URL.",
+          "maxLength": 500
+        },
+        "autoBackupEnabled": {
+          "type": "boolean",
+          "description": "Whether edits automatically sync to Firestore when online."
+        },
+        "autoRestoreEnabled": {
+          "type": "boolean",
+          "description": "Whether newer cloud data automatically restores on sign-in."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was last updated."
+        }
+      },
+      "required": ["uid", "email", "displayName", "autoBackupEnabled", "autoRestoreEnabled", "createdAt", "updatedAt"]
+    },
+    "BudgetSheet": {
+      "title": "BudgetSheet",
+      "description": "Monthly Philippine Peso budget and payroll spreadsheet document stored natively as Firestore maps.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the sheet owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "id": {
+          "type": "string",
+          "description": "Month identifier (e.g. 2026-10).",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Month display name (e.g. October 2026).",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "sheetTitle": {
+          "type": "string",
+          "description": "Editable spreadsheet header title.",
+          "maxLength": 120
+        },
+        "year": {
+          "type": "number",
+          "description": "Calendar fiscal year."
+        },
+        "rowOrder": {
+          "type": "array",
+          "description": "Ordered list of row IDs in the sheet."
+        },
+        "salaryBreakdown": {
+          "type": "object",
+          "description": "Monthly and 15th cutoff salary breakdown map."
+        },
+        "rows": {
+          "type": "object",
+          "description": "Map of row states keyed by rowId."
+        },
+        "columnHeaders": {
+          "type": "object",
+          "description": "Editable column header labels map."
+        },
+        "clientUpdatedAt": {
+          "type": "string",
+          "description": "Client ISO timestamp for merge/conflict comparison.",
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when sheet was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when sheet was last updated."
+        }
+      },
+      "required": ["ownerUid", "id", "name", "year", "salaryBreakdown", "rows", "clientUpdatedAt", "createdAt", "updatedAt"]
+    },
+    "CloudBackup": {
+      "title": "CloudBackup",
+      "description": "Timestamped full workbook snapshot saved by the user to Firestore.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the backup owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "id": {
+          "type": "string",
+          "description": "Backup snapshot identifier.",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "deviceInfo": {
+          "type": "string",
+          "description": "Platform or browser that created the snapshot.",
+          "maxLength": 120
+        },
+        "monthsCount": {
+          "type": "number",
+          "description": "Total number of monthly sheets in the snapshot."
+        },
+        "version": {
+          "type": "string",
+          "description": "Schema version tag.",
+          "maxLength": 32
+        },
+        "data": {
+          "type": "object",
+          "description": "Native map of MonthData objects keyed by monthId."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when snapshot was saved."
+        }
+      },
+      "required": ["ownerUid", "id", "deviceInfo", "monthsCount", "data", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile and sync preferences for the authenticated Google user."
+    },
+    "/users/{userId}/sheets/{monthId}": {
+      "schema": { "$ref": "#/entities/BudgetSheet" },
+      "description": "Real-time synced monthly budget sheets owned by the user."
+    },
+    "/users/{userId}/backups/{backupId}": {
+      "schema": { "$ref": "#/entities/CloudBackup" },
+      "description": "Timestamped cloud backup snapshots owned by the user."
+    }
+  }
+}
