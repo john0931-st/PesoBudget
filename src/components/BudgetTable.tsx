@@ -29,6 +29,7 @@ import {
 } from '../utils/cellMerge';
 import { formatCurrency, stripCurrencySymbols } from '../utils/currency';
 import { useCurrency } from '../hooks/useCurrency';
+import { useViewportAdaptation } from '../hooks/useViewportAdaptation';
 import { EditFormulaModal } from './EditFormulaModal';
 import {
   Plus,
@@ -46,6 +47,10 @@ import {
   Split,
   ArrowUp,
   ArrowDown,
+  Undo2,
+  Redo2,
+  Filter,
+  CheckCheck,
 } from 'lucide-react';
 
 interface BudgetTableProps {
@@ -107,6 +112,11 @@ interface BudgetTableProps {
   onMergeRowCells?: (rowId: RowId, startCol: CellColumn, endCol: CellColumn) => void;
   onUnmergeRowCells?: (rowId: RowId, targetCol: CellColumn) => void;
   onReorderRows?: (fromIndex: number, toIndex: number) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onBatchUpdateRemarks?: (rowIds: RowId[], remarksValue: string) => void;
 }
 
 const DEFAULT_COLUMN_ORDER = ['payments', 'monthly', 'cutoff15th', 'remarks'];
@@ -136,9 +146,16 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
   onMergeRowCells,
   onUnmergeRowCells,
   onReorderRows,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  onBatchUpdateRemarks,
 }) => {
   const { currency } = useCurrency();
   const currencySymbolClean = currency.symbol.trim();
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const viewport = useViewportAdaptation(tableScrollRef);
 
   // Drag-and-drop & FLIP row animation state
   const [draggedRowId, setDraggedRowId] = useState<RowId | null>(null);
@@ -159,6 +176,18 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     rowId: RowId;
     column: CellColumn;
   } | null>(null);
+  const skipNextBlurRef = useRef(false);
+
+  useEffect(() => {
+    skipNextBlurRef.current = false;
+  }, [editingCell]);
+
+  // Remarks status filter chip ('all' | 'settled' | 'deferred' | 'unset')
+  const [remarksFilter, setRemarksFilter] = useState<'all' | 'settled' | 'deferred' | 'unset'>('all');
+
+  useEffect(() => {
+    setRemarksFilter('all');
+  }, [monthData.id]);
 
   // Editable column headers state (supports standard & custom columns)
   const [editingHeader, setEditingHeader] = useState<string | null>(null);
@@ -235,8 +264,101 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     return customColMap[colId]?.label || colId;
   };
 
-  // Table Density Mode: always 'compact' as requested
-  const [tableDensity] = useState<'compact' | 'normal' | 'spacious'>('compact');
+  // Device- & resolution-adaptive typography, spacing, and wrapping tokens
+  const adaptive = useMemo(() => {
+    const colCount = effectiveColumnOrder.length;
+    const hasManyCols = colCount >= 5;
+    const hasExtraCols = colCount >= 6;
+    const shortVp = viewport.isShortViewport;
+
+    switch (viewport.deviceTier) {
+      case 'mobile-sm':
+        return {
+          titleFont: 'text-[15px] leading-tight tracking-tight',
+          headerFont: hasManyCols
+            ? 'text-[9px] leading-tight tracking-wide'
+            : 'text-[10px] leading-tight tracking-wider',
+          labelFont: hasManyCols ? 'text-[10.5px] leading-snug' : 'text-[11px] leading-snug',
+          numFont: hasExtraCols
+            ? 'text-[9.5px] leading-tight'
+            : hasManyCols
+            ? 'text-[10px] leading-tight'
+            : 'text-[10.5px] leading-tight',
+          symbolFont: hasManyCols ? 'text-[9px] leading-tight' : 'text-[10px] leading-tight',
+          remarksFont: hasManyCols ? 'text-[9.5px] leading-tight' : 'text-[10.5px] leading-tight',
+          remarksPad: 'px-1.5 py-0.5',
+          cellPad: 'py-1.5 px-1',
+          thPad: 'py-2 px-1',
+          paymentWrap: 'break-words line-clamp-2',
+          editPad: 'px-1 py-0.5',
+        };
+      case 'mobile':
+        return {
+          titleFont: 'text-base leading-tight tracking-tight',
+          headerFont: hasManyCols
+            ? 'text-[10px] leading-tight tracking-wide'
+            : 'text-[11px] leading-tight tracking-wider',
+          labelFont: hasManyCols ? 'text-[11px] leading-snug' : 'text-xs leading-snug',
+          numFont: hasExtraCols
+            ? 'text-[10px] leading-tight'
+            : hasManyCols
+            ? 'text-[10.5px] leading-tight'
+            : 'text-[11.5px] leading-tight',
+          symbolFont: hasManyCols ? 'text-[10px] leading-tight' : 'text-[11px] leading-tight',
+          remarksFont: hasManyCols ? 'text-[10.5px] leading-tight' : 'text-[11px] leading-tight',
+          remarksPad: 'px-2 py-0.5',
+          cellPad: 'py-1.5 px-1.5',
+          thPad: 'py-2 px-1.5',
+          paymentWrap: 'break-words line-clamp-2',
+          editPad: 'px-1.5 py-0.5',
+        };
+      case 'tablet':
+        return {
+          titleFont: 'text-lg leading-tight tracking-tight',
+          headerFont: hasManyCols
+            ? 'text-[11px] leading-tight tracking-wider'
+            : 'text-xs leading-tight tracking-wider',
+          labelFont: hasManyCols ? 'text-[12.5px] leading-snug' : 'text-[13.5px] leading-snug',
+          numFont: hasManyCols ? 'text-xs leading-snug' : 'text-[13px] leading-snug',
+          symbolFont: hasManyCols ? 'text-[11.5px] leading-snug' : 'text-xs leading-snug',
+          remarksFont: hasManyCols ? 'text-[11.5px] leading-snug' : 'text-xs leading-snug',
+          remarksPad: 'px-2.5 py-0.5',
+          cellPad: shortVp ? 'py-1.5 px-2.5' : 'py-2 px-2.5',
+          thPad: 'py-2.5 px-2.5',
+          paymentWrap: 'truncate',
+          editPad: 'px-2 py-0.5',
+        };
+      case 'wide':
+        return {
+          titleFont: 'text-[22px] leading-tight tracking-tight',
+          headerFont: 'text-sm leading-tight tracking-wider',
+          labelFont: hasManyCols ? 'text-[14.5px] leading-snug' : 'text-[15.5px] leading-snug',
+          numFont: hasManyCols ? 'text-[14px] leading-snug' : 'text-[15px] leading-snug',
+          symbolFont: hasManyCols ? 'text-[13px] leading-snug' : 'text-sm leading-snug',
+          remarksFont: 'text-[13.5px] leading-snug',
+          remarksPad: 'px-3 py-0.5',
+          cellPad: shortVp ? 'py-2 px-4' : 'py-2.5 px-4',
+          thPad: 'py-3 px-4',
+          paymentWrap: 'truncate',
+          editPad: 'px-2.5 py-0.5',
+        };
+      case 'desktop':
+      default:
+        return {
+          titleFont: 'text-xl leading-tight tracking-tight',
+          headerFont: 'text-[13px] leading-tight tracking-wider',
+          labelFont: hasManyCols ? 'text-[13.5px] leading-snug' : 'text-[14.5px] leading-snug',
+          numFont: hasManyCols ? 'text-[13px] leading-snug' : 'text-[14px] leading-snug',
+          symbolFont: hasManyCols ? 'text-xs leading-snug' : 'text-[13px] leading-snug',
+          remarksFont: 'text-[13px] leading-snug',
+          remarksPad: 'px-2.5 py-0.5',
+          cellPad: shortVp ? 'py-1.5 px-3' : 'py-2 px-3',
+          thPad: 'py-2.5 px-3',
+          paymentWrap: 'truncate',
+          editPad: 'px-2 py-0.5',
+        };
+    }
+  }, [viewport.deviceTier, viewport.isShortViewport, effectiveColumnOrder.length]);
 
   // Dedicated Remarks Popup state for non-summary rows (OK, Next Payroll, None)
   const [remarksPopupTarget, setRemarksPopupTarget] = useState<{
@@ -492,35 +614,268 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     }
   };
 
+  const coreNonExpenseSet = useMemo(
+    () => new Set<string>(['qr_ph', 'metrobank', 'total', 'salary', 'balance', 'mp2', 'gotyme']),
+    []
+  );
+
+  const effectiveRowOrder: RowId[] = monthData.rowOrder || INITIAL_ROW_ORDER;
+
+  const expenseRemarksStats = useMemo(() => {
+    let settledCount = 0;
+    let deferredCount = 0;
+    let unsetCount = 0;
+    const unsetCashRowIds: RowId[] = [];
+
+    for (const id of effectiveRowOrder) {
+      if (coreNonExpenseSet.has(id)) continue;
+      const row = rows[id];
+      if (!row) continue;
+      const rem = row.remarks || '';
+      if (rem === 'OK' || rem === 'Settled') {
+        settledCount += 1;
+      } else if (rem === 'Next Payroll' || rem === 'Deferred') {
+        deferredCount += 1;
+      } else {
+        unsetCount += 1;
+        const hasAmount =
+          (row.monthly?.value || 0) > 0 ||
+          (row.cutoff15th?.value || 0) > 0 ||
+          Boolean(row.monthly?.rawInput?.trim()) ||
+          Boolean(row.cutoff15th?.rawInput?.trim());
+        if (hasAmount) {
+          unsetCashRowIds.push(id);
+        }
+      }
+    }
+    return { settledCount, deferredCount, unsetCount, unsetCashRowIds };
+  }, [effectiveRowOrder, rows, coreNonExpenseSet]);
+
+  const displayedRowOrder: RowId[] = useMemo(() => {
+    if (remarksFilter === 'all') return effectiveRowOrder;
+    return effectiveRowOrder.filter((id) => {
+      if (coreNonExpenseSet.has(id)) return true;
+      const row = rows[id];
+      if (!row) return false;
+      const rem = row.remarks || '';
+      if (remarksFilter === 'settled') return rem === 'OK' || rem === 'Settled';
+      if (remarksFilter === 'deferred') return rem === 'Next Payroll' || rem === 'Deferred';
+      return !rem || rem === 'None';
+    });
+  }, [effectiveRowOrder, remarksFilter, rows, coreNonExpenseSet]);
+
   /**
-   * Keyboard navigation and commit on Enter or Tab
+   * Selects a specific grid coordinate safely without triggering Remarks popup interruptions
+   */
+  const selectCellAt = (targetRowId: RowId, targetCol: CellColumn) => {
+    const targetRow = rows[targetRowId];
+    if (!targetRow) return;
+
+    const targetRanges = getEffectiveRowMergeRanges(targetRowId, targetRow, effectiveColumnOrder);
+    const mergeMatch = findMergeRangeCoveringColumn(targetRanges, targetCol, effectiveColumnOrder);
+
+    if (mergeMatch && mergeMatch.colSpan > 1) {
+      const primaryCol = resolveMergePrimaryColumn(mergeMatch.range, effectiveColumnOrder);
+      const primaryMeta = getCellMeta(targetRowId, primaryCol, targetRow);
+      const fallbackInput =
+        primaryMeta.rawInput ||
+        mergeMatch.columns.map((c) => getCellMeta(targetRowId, c, targetRow).rawInput).find(Boolean) ||
+        '';
+      const fallbackNote =
+        primaryMeta.noteText ||
+        mergeMatch.columns.map((c) => getCellMeta(targetRowId, c, targetRow).noteText).find(Boolean) ||
+        '';
+      onSelectCell(targetRowId, primaryCol, fallbackInput, fallbackNote);
+    } else {
+      const meta = getCellMeta(targetRowId, targetCol, targetRow);
+      onSelectCell(targetRowId, targetCol, meta.rawInput, meta.noteText);
+    }
+
+    requestAnimationFrame(() => {
+      const cellEl = tableScrollRef.current?.querySelector(
+        `[data-cell-key="${CSS.escape(`${targetRowId}::${targetCol}`)}"]`
+      ) as HTMLElement | null;
+      cellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+  };
+
+  /**
+   * Moves active selection by delta rows (dy) and delta columns (dx), skipping hidden merged columns
+   */
+  const moveSelection = (dy: number, dx: number, fromRowId: RowId, fromCol: CellColumn) => {
+    const rowIdx = displayedRowOrder.indexOf(fromRowId);
+    if (rowIdx === -1) return;
+
+    let nextRowIdx = rowIdx;
+    let nextColIdx = effectiveColumnOrder.indexOf(fromCol);
+    if (nextColIdx === -1) nextColIdx = 0;
+
+    if (dy !== 0) {
+      nextRowIdx = Math.max(0, Math.min(displayedRowOrder.length - 1, rowIdx + dy));
+      const targetRowId = displayedRowOrder[nextRowIdx];
+      if (targetRowId) {
+        selectCellAt(targetRowId, effectiveColumnOrder[nextColIdx] || fromCol);
+      }
+      return;
+    }
+
+    if (dx !== 0) {
+      const fromRow = rows[fromRowId];
+      if (fromRow) {
+        const currentRanges = getEffectiveRowMergeRanges(fromRowId, fromRow, effectiveColumnOrder);
+        const currentMerge = findMergeRangeCoveringColumn(currentRanges, fromCol, effectiveColumnOrder);
+        if (currentMerge && currentMerge.colSpan > 1) {
+          nextColIdx = dx > 0 ? currentMerge.endIdx + 1 : currentMerge.startIdx - 1;
+        } else {
+          nextColIdx += dx;
+        }
+      } else {
+        nextColIdx += dx;
+      }
+
+      // Wrap across rows when Tab/Shift+Tab reaches row boundary
+      if (nextColIdx >= effectiveColumnOrder.length) {
+        if (rowIdx < displayedRowOrder.length - 1) {
+          nextRowIdx = rowIdx + 1;
+          nextColIdx = 0;
+        } else {
+          nextColIdx = effectiveColumnOrder.length - 1;
+        }
+      } else if (nextColIdx < 0) {
+        if (rowIdx > 0) {
+          nextRowIdx = rowIdx - 1;
+          nextColIdx = effectiveColumnOrder.length - 1;
+        } else {
+          nextColIdx = 0;
+        }
+      }
+
+      const targetRowId = displayedRowOrder[nextRowIdx];
+      const targetCol = effectiveColumnOrder[nextColIdx];
+      if (targetRowId && targetCol) {
+        selectCellAt(targetRowId, targetCol);
+      }
+    }
+  };
+
+  /**
+   * 4-way Arrow, Tab, Enter/F2, and Escape keyboard navigation when a grid cell is selected (not inline-editing)
+   */
+  useEffect(() => {
+    if (
+      !activeCell ||
+      editingCell ||
+      editingLabelRowId ||
+      isEditingTitle ||
+      editingHeader ||
+      remarksPopupTarget ||
+      formulaModalTarget ||
+      mergeModalState ||
+      isAddNewModalOpen ||
+      isRemoveModalOpen ||
+      isAddColModalOpen ||
+      isRemoveColModalOpen
+    ) {
+      return;
+    }
+
+    const handleGridKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveSelection(-1, 0, activeCell.rowId, activeCell.column);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveSelection(1, 0, activeCell.rowId, activeCell.column);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        moveSelection(0, -1, activeCell.rowId, activeCell.column);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        moveSelection(0, 1, activeCell.rowId, activeCell.column);
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        moveSelection(0, e.shiftKey ? -1 : 1, activeCell.rowId, activeCell.column);
+      } else if (e.key === 'Enter' || e.key === 'F2') {
+        e.preventDefault();
+        const currentRow = rows[activeCell.rowId];
+        if (!currentRow) return;
+        if (activeCell.column === 'payments') {
+          setEditingLabelRowId(activeCell.rowId);
+          setEditingLabelText(currentRow.label);
+        } else if (
+          activeCell.column === 'remarks' &&
+          !['metrobank', 'total', 'salary', 'balance'].includes(activeCell.rowId)
+        ) {
+          onSelectCell(null as any, null as any, '', '');
+          setRemarksPopupTarget({
+            rowId: activeCell.rowId,
+            rowLabel: currentRow.label,
+            currentRemarks: currentRow.remarks || '',
+          });
+        } else if (
+          activeCell.rowId === 'salary' &&
+          (activeCell.column === 'monthly' || activeCell.column === 'cutoff15th')
+        ) {
+          onOpenSalaryModal();
+        } else {
+          const meta = getCellMeta(activeCell.rowId, activeCell.column, currentRow);
+          if (!meta.isReadOnly) {
+            setEditingCell({ rowId: activeCell.rowId, column: activeCell.column });
+          } else if (
+            ['qr_ph', 'metrobank', 'total', 'salary', 'balance'].includes(activeCell.rowId) &&
+            (activeCell.column === 'monthly' || activeCell.column === 'cutoff15th')
+          ) {
+            setFormulaModalTarget({
+              rowId: activeCell.rowId,
+              rowLabel: currentRow.label,
+              column: activeCell.column,
+            });
+          }
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onSelectCell(null as any, null as any, '', '');
+      }
+    };
+
+    window.addEventListener('keydown', handleGridKeyDown);
+    return () => window.removeEventListener('keydown', handleGridKeyDown);
+  });
+
+  /**
+   * Keyboard navigation and directional commit while inline-editing a cell
    */
   const handleKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
     rowId: RowId,
-    column: CellColumn
+    column: CellColumn,
+    commitFn?: (val: string) => void
   ) => {
     if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
+      skipNextBlurRef.current = true;
+      commitFn?.(e.currentTarget.value);
       setEditingCell(null);
-
-      const effectiveRowOrder = monthData.rowOrder || INITIAL_ROW_ORDER;
-      const currentIndex = effectiveRowOrder.indexOf(rowId);
-      if (currentIndex !== -1 && currentIndex < effectiveRowOrder.length - 1) {
-        const nextRowId = effectiveRowOrder[currentIndex + 1];
-        const nextRow = rows[nextRowId];
-        if (nextRow) {
-          const nextRanges = getEffectiveRowMergeRanges(nextRowId, nextRow, effectiveColumnOrder);
-          const nextMerge = findMergeRangeCoveringColumn(nextRanges, column, effectiveColumnOrder);
-          if (nextMerge && nextMerge.colSpan > 1) {
-            const nextPrimary = resolveMergePrimaryColumn(nextMerge.range, effectiveColumnOrder);
-            handleMergedCellClick(nextRowId, nextRow, nextPrimary, nextMerge.columns);
-          } else {
-            handleCellClick(nextRowId, column, nextRow);
-          }
-        }
+      if (e.key === 'Enter') {
+        moveSelection(e.shiftKey ? -1 : 1, 0, rowId, column);
+      } else {
+        moveSelection(0, e.shiftKey ? -1 : 1, rowId, column);
       }
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      skipNextBlurRef.current = true;
       setEditingCell(null);
     }
   };
@@ -545,12 +900,12 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     });
 
     return (
-      <div className="flex items-center justify-between w-full px-1 sm:px-1.5 lg:px-2.5 min-w-0">
-        <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium opacity-90">
-          {isNegative ? `-${currency.symbol}` : currency.symbol}
+      <div className="flex items-center justify-between gap-0.5 w-full px-0.5 sm:px-1 min-w-0">
+        <span className={`font-sans ${adaptive.symbolFont} select-none shrink-0 font-medium opacity-90`}>
+          {currency.symbol}
         </span>
-        <span className="font-mono tabular-nums tracking-tight font-medium text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">
-          {formatted}
+        <span className={`font-mono tabular-nums tracking-tight font-medium text-right flex-1 truncate ${adaptive.numFont}`}>
+          {isNegative ? `-${formatted}` : formatted}
         </span>
       </div>
     );
@@ -564,11 +919,11 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     const zeroStr = currency.decimals > 0 ? `0.${'0'.repeat(currency.decimals)}` : '0';
     if (!remarksVal || remarksVal === '—' || remarksVal === '') {
       return (
-        <div className="flex items-center justify-between w-full px-1 sm:px-1.5 lg:px-2.5 opacity-60 min-w-0">
-          <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium">
+        <div className="flex items-center justify-between gap-0.5 w-full px-0.5 sm:px-1 opacity-60 min-w-0">
+          <span className={`font-sans ${adaptive.symbolFont} select-none shrink-0 font-medium`}>
             {currency.symbol}
           </span>
-          <span className="font-mono tabular-nums font-semibold text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">
+          <span className={`font-mono tabular-nums tracking-tight font-semibold text-right flex-1 truncate ${adaptive.numFont}`}>
             {zeroStr}
           </span>
         </div>
@@ -588,12 +943,12 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
         });
 
     return (
-      <div className="flex items-center justify-between w-full px-1 sm:px-1.5 lg:px-2.5 min-w-0">
-        <span className="font-sans text-[10px] sm:text-xs lg:text-sm xl:text-[15px] select-none shrink-0 font-medium opacity-90">
-          {isNegative ? `-${currency.symbol}` : currency.symbol}
+      <div className="flex items-center justify-between gap-0.5 w-full px-0.5 sm:px-1 min-w-0">
+        <span className={`font-sans ${adaptive.symbolFont} select-none shrink-0 font-medium opacity-90`}>
+          {currency.symbol}
         </span>
-        <span className="font-mono tabular-nums font-semibold text-right flex-1 truncate text-[10.5px] sm:text-xs lg:text-sm xl:text-[15px]">
-          {formatted}
+        <span className={`font-mono tabular-nums tracking-tight font-semibold text-right flex-1 truncate ${adaptive.numFont}`}>
+          {isNegative ? `-${formatted}` : formatted}
         </span>
       </div>
     );
@@ -631,7 +986,6 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     );
   };
 
-  const effectiveRowOrder: RowId[] = monthData.rowOrder || INITIAL_ROW_ORDER;
   const mergeableColumnIds = useMemo(
     () => effectiveColumnOrder.filter(canColumnMerge),
     [effectiveColumnOrder]
@@ -749,33 +1103,65 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     onReorderRows(fromIdx, toIdx);
   };
 
-  const isDefaultFourColumns =
-    effectiveColumnOrder.length === 4 &&
-    effectiveColumnOrder[0] === 'payments' &&
-    effectiveColumnOrder[1] === 'monthly' &&
-    effectiveColumnOrder[2] === 'cutoff15th' &&
-    effectiveColumnOrder[3] === 'remarks';
-
   const getColumnWidthClass = (colId: string): string => {
-    if (isDefaultFourColumns) {
+    const colCount = effectiveColumnOrder.length;
+    if (colCount === 1) return 'w-full';
+    if (colCount === 2) return 'w-[50%]';
+    if (colCount === 3) return colId === 'payments' ? 'w-[40%]' : 'w-[30%]';
+    if (colCount === 4) {
+      if (viewport.isMobileDevice) {
+        if (colId === 'payments') return 'w-[27%]';
+        if (colId === 'monthly' || colId === 'cutoff15th') return 'w-[25%]';
+        return 'w-[23%]';
+      }
       return colId === 'payments' ? 'w-[31%]' : 'w-[23%]';
     }
-    if (effectiveColumnOrder.length > 4) {
-      return colId === 'payments' ? 'w-[165px] min-w-[140px]' : 'w-[125px] min-w-[110px]';
-    }
-    if (effectiveColumnOrder.length === 1) return 'w-full';
-    if (effectiveColumnOrder.length === 2) return colId === 'payments' ? 'w-[50%]' : 'w-[50%]';
-    if (effectiveColumnOrder.length === 3) return colId === 'payments' ? 'w-[40%]' : 'w-[30%]';
-    return colId === 'payments' ? 'w-[31%]' : 'w-[23%]';
+    if (colCount === 5) return colId === 'payments' ? 'w-[24%]' : 'w-[19%]';
+    if (colCount === 6) return colId === 'payments' ? 'w-[20%]' : 'w-[16%]';
+    if (colCount === 7) return colId === 'payments' ? 'w-[16%]' : 'w-[14%]';
+    return colId === 'payments' ? 'w-[16%]' : 'w-auto';
   };
 
   return (
-    <div className="w-full h-full flex flex-col py-0.5 select-text overflow-hidden">
-      <div className="w-full h-full flex flex-col bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-slate-700 shadow-md rounded-xl sm:rounded-2xl overflow-hidden transition-colors">
-        {/* Editable Master Sheet Header: title of the table should be editable + 3-dots column menu */}
-        <div className="bg-white dark:bg-slate-900 border-b-2 border-slate-900 dark:border-slate-700 py-1 sm:py-1.5 px-3 flex items-center justify-center relative group select-none shrink-0">
+    <div className="w-full h-full min-h-0 flex flex-col p-1 sm:p-1.5 select-text">
+      <div className="w-full h-full min-h-0 flex flex-col bg-white dark:bg-slate-900 border border-slate-300/90 dark:border-slate-700/90 ring-1 ring-slate-900/[0.04] dark:ring-white/[0.06] shadow-[0_0_16px_rgba(15,23,42,0.08),0_1px_4px_rgba(15,23,42,0.05)] dark:shadow-[0_0_20px_rgba(0,0,0,0.45),0_1px_4px_rgba(0,0,0,0.3)] rounded-2xl overflow-hidden transition-colors">
+        {/* Editable Master Sheet Header: Undo/Redo + Editable Title + 3-Dots Column Menu */}
+        <div className="bg-gradient-to-b from-slate-50/90 to-white dark:from-slate-900 dark:to-slate-900 border-b border-slate-200/90 dark:border-slate-800 py-2 sm:py-2.5 px-2.5 sm:px-4 flex items-center justify-between gap-2 relative group select-none shrink-0">
+          {!isEditingTitle && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                disabled={!canUndo}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUndo?.();
+                }}
+                title="Undo last change (Ctrl+Z)"
+                aria-label="Undo last change"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-35 disabled:pointer-events-none text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Undo2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="hidden md:inline">Undo</span>
+              </button>
+              <button
+                type="button"
+                disabled={!canRedo}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRedo?.();
+                }}
+                title="Redo last undone change (Ctrl+Y)"
+                aria-label="Redo last undone change"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-35 disabled:pointer-events-none text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Redo2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="hidden md:inline">Redo</span>
+              </button>
+            </div>
+          )}
+
           {isEditingTitle ? (
-            <div className="flex items-center gap-2 w-full max-w-lg justify-center">
+            <div className="flex items-center gap-2 w-full max-w-lg mx-auto justify-center">
               <input
                 type="text"
                 autoFocus
@@ -794,7 +1180,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                     setTitleInput(currentSheetTitle);
                   }
                 }}
-                className="w-full text-sm sm:text-base lg:text-lg xl:text-xl font-black tracking-tight text-center border-2 border-slate-900 dark:border-slate-500 rounded bg-amber-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none px-2 py-0.5 font-sans uppercase shadow-xs"
+                className={`w-full ${adaptive.titleFont} font-extrabold text-center border border-emerald-500 dark:border-emerald-400 rounded-lg bg-amber-50/40 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 px-2.5 py-1 font-sans uppercase shadow-xs`}
                 placeholder="Enter Table Month Title (e.g. OCTOBER 2026)"
               />
               <button
@@ -804,7 +1190,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   setIsEditingTitle(false);
                   if (titleInput.trim()) onUpdateSheetTitle(titleInput.trim());
                 }}
-                className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer shadow-2xs transition-colors shrink-0"
+                className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md cursor-pointer shadow-2xs transition-colors shrink-0"
                 title="Save Title"
               >
                 <Check className="w-4 h-4" />
@@ -816,15 +1202,15 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   setIsEditingTitle(false);
                   setTitleInput(currentSheetTitle);
                 }}
-                className="p-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded cursor-pointer transition-colors shrink-0"
+                className="p-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-md cursor-pointer transition-colors shrink-0"
                 title="Cancel"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-sm sm:text-base lg:text-lg xl:text-xl font-black tracking-tight text-slate-900 dark:text-slate-100 font-sans uppercase text-center leading-tight px-1.5">
+            <div className="flex items-center justify-center gap-1 min-w-0">
+              <h1 className={`${adaptive.titleFont} font-extrabold text-slate-900 dark:text-slate-100 font-sans uppercase text-center px-1.5 truncate`}>
                 {currentSheetTitle}
               </h1>
               <button
@@ -846,37 +1232,104 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               </button>
             </div>
           )}
+
+          {!isEditingTitle && (
+            <div className="hidden sm:flex items-center justify-end gap-1.5 shrink-0 min-w-[68px] md:min-w-[120px]">
+              <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 hidden lg:inline">
+                Arrows · Tab · F2
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Dynamic Header & Body Columns */}
-        <div className="flex-1 min-h-0 w-full overflow-auto">
-          <table
-            style={
-              effectiveColumnOrder.length > 4
-                ? { minWidth: `${Math.max(520, effectiveColumnOrder.length * 130)}px` }
-                : undefined
-            }
-            className={`w-full min-w-[360px] min-h-full border-collapse ${tableDensity === 'compact' ? 'text-[11px] sm:text-xs lg:text-sm xl:text-[15px]' : tableDensity === 'spacious' ? 'text-xs sm:text-sm lg:text-base' : 'text-xs lg:text-sm'} font-sans table-fixed`}
-          >
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900 border-b-2 border-slate-900 dark:border-slate-700 shadow-[0_2px_0_0_#0f172a] dark:shadow-[0_2px_0_0_#334155]">
-              <tr className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-bold uppercase tracking-wider text-[10.5px] sm:text-[11px] lg:text-xs xl:text-sm leading-tight">
+        {/* Sleek Remarks Filter Strip + Quick Settle All Cash Bills */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/95 border-b border-slate-200/80 dark:border-slate-800 px-2.5 sm:px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs select-none shrink-0">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-0.5">
+              <Filter className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Filter:</span>
+            </span>
+            {(
+              [
+                { id: 'all', label: 'All', count: null },
+                { id: 'settled', label: 'Settled', count: expenseRemarksStats.settledCount },
+                { id: 'deferred', label: 'Deferred', count: expenseRemarksStats.deferredCount },
+                { id: 'unset', label: 'Unset', count: expenseRemarksStats.unsetCount },
+              ] as const
+            ).map((chip) => {
+              const isActive = remarksFilter === chip.id;
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setRemarksFilter(chip.id)}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer border ${
+                    isActive
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <span>{chip.label}</span>
+                  {chip.count !== null && (
+                    <span
+                      className={`font-mono text-[10px] px-1 rounded ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      {chip.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {expenseRemarksStats.unsetCashRowIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onBatchUpdateRemarks) {
+                  onBatchUpdateRemarks(expenseRemarksStats.unsetCashRowIds, 'OK');
+                } else {
+                  expenseRemarksStats.unsetCashRowIds.forEach((id) => onUpdateRemarks(id, 'OK'));
+                }
+              }}
+              title="Mark all unset bills with amounts as Settled"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800 transition-colors cursor-pointer"
+            >
+              <CheckCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Settle {expenseRemarksStats.unsetCashRowIds.length} Unset</span>
+            </button>
+          )}
+        </div>
+
+        {/* Dynamic Header & Body Columns (Vertical Scroll Only - Zero Horizontal Scroll) */}
+        <div
+          ref={tableScrollRef}
+          className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden"
+        >
+          <table className="w-full max-w-full min-h-full border-collapse font-sans table-fixed">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-800/90 backdrop-blur-xs border-b border-slate-300/90 dark:border-slate-700 shadow-[0_1px_0_0_rgba(15,23,42,0.06)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
+              <tr className={`text-slate-600 dark:text-slate-300 font-bold uppercase ${adaptive.headerFont}`}>
                 {effectiveColumnOrder.map((colId, colIdx) => {
                   const isLastCol = colIdx === effectiveColumnOrder.length - 1;
                   const borderRightClass = isLastCol
                     ? ''
                     : colId === 'payments'
-                    ? 'border-r-2 border-slate-900 dark:border-slate-700'
-                    : 'border-r border-slate-900 dark:border-slate-700';
+                    ? 'border-r border-slate-300/90 dark:border-slate-700/90'
+                    : 'border-r border-slate-200/80 dark:border-slate-800/85';
                   const widthClass = getColumnWidthClass(colId);
 
                   if (colId === 'payments') {
                     return (
                       <th
                         key={colId}
-                        className={`py-1 lg:py-2 px-1 sm:px-2 lg:px-3 ${borderRightClass} text-center ${widthClass} relative align-middle`}
+                        className={`${adaptive.thPad} ${borderRightClass} text-center ${widthClass} relative align-middle overflow-hidden`}
                       >
-                        <div className="flex items-center justify-between px-1">
-                          <span className="w-5" />
+                        <div className="flex items-center justify-between gap-0.5 px-0.5 min-w-0">
+                          <span className={viewport.isMobileDevice ? 'hidden' : 'w-5 shrink-0'} />
                           {editingHeader === 'payments' ? (
                             <input
                               type="text"
@@ -899,15 +1352,15 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                   setEditingHeader(null);
                                 }
                               }}
-                              className="text-[11px] lg:text-xs xl:text-sm font-bold text-center border border-slate-900 dark:border-slate-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-1 py-0.5 rounded focus:outline-none uppercase w-24 lg:w-32"
+                              className={`${adaptive.headerFont} font-bold text-center border border-emerald-500 dark:border-emerald-400 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-1 py-0.5 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/25 uppercase w-full max-w-[128px]`}
                             />
                           ) : (
-                            <span className="font-bold truncate">
+                            <span className="font-bold truncate min-w-0">
                               {monthData.columnHeaders?.payments || 'PAYMENTS'}
                             </span>
                           )}
 
-                          <div className="relative">
+                          <div className="relative shrink-0">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -921,7 +1374,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                 }
                               }}
                               title="Payment Options: Add New or Remove Items"
-                              className="w-6 h-6 rounded flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              className="w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/80 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                             >
                               <MoreVertical className="w-3.5 h-3.5" />
                             </button>
@@ -938,7 +1391,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   return (
                     <th
                       key={colId}
-                      className={`py-1 lg:py-2 px-1 sm:px-2 lg:px-3 ${borderRightClass} text-center ${widthClass} align-middle`}
+                      className={`${adaptive.thPad} ${borderRightClass} text-center ${widthClass} align-middle overflow-hidden`}
                     >
                       {editingHeader === colId ? (
                         <input
@@ -970,7 +1423,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                               setEditingHeader(null);
                             }
                           }}
-                          className="text-[11px] lg:text-xs xl:text-sm font-bold text-center border border-slate-900 dark:border-slate-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-1 py-0.5 rounded focus:outline-none uppercase w-20 lg:w-28"
+                          className={`${adaptive.headerFont} font-bold text-center border border-emerald-500 dark:border-emerald-400 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-1 py-0.5 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/25 uppercase w-full max-w-[128px]`}
                         />
                       ) : (
                         <span
@@ -978,11 +1431,11 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             setHeaderInputText(headerLabel);
                             setEditingHeader(colId);
                           }}
-                          className="cursor-pointer hover:underline underline-offset-2 inline-flex items-center gap-1 max-w-full truncate"
+                          className="cursor-pointer hover:underline underline-offset-2 inline-flex items-center justify-center gap-1 max-w-full truncate"
                           title={`Click to rename ${headerLabel} header`}
                         >
                           <span className="truncate">{headerLabel}</span>
-                          <Edit2 className="w-2.5 h-2.5 opacity-40 hover:opacity-100 shrink-0" />
+                          <Edit2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 opacity-45 hover:opacity-100 shrink-0" />
                         </span>
                       )}
                     </th>
@@ -991,7 +1444,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               </tr>
             </thead>
             <tbody>
-              {effectiveRowOrder.map((rowId, rowIdx) => {
+              {displayedRowOrder.map((rowId, rowIdx) => {
                 const row = rows[rowId];
                 if (!row) return null;
 
@@ -1005,6 +1458,10 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                 const isSpecialFillRow =
                   isQrPh || isMetrobank || isTotal || isSalary || isBalance || isMp2 || isGotyme;
                 const isLoanRow = rowId === 'loan' || rowId.startsWith('loan_');
+
+                const isNegativeBalance =
+                  isBalance &&
+                  ((row.monthly?.value || 0) < 0 || (row.cutoff15th?.value || 0) < 0);
 
                 // Modern tonal fintech cell fills with balanced light/dark contrast
                 let rowBgClass =
@@ -1025,12 +1482,18 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   labelTextClass = 'text-sky-950 dark:text-sky-100 font-bold';
                 } else if (isSalary) {
                   rowBgClass =
-                    'bg-rose-100/95 hover:bg-rose-200/75 dark:bg-rose-950/65 dark:hover:bg-rose-900/70 text-rose-950 dark:text-rose-100 font-bold';
-                  labelTextClass = 'text-rose-950 dark:text-rose-100 font-bold';
+                    'bg-violet-100/90 hover:bg-violet-200/70 dark:bg-violet-950/60 dark:hover:bg-violet-900/70 text-violet-950 dark:text-violet-100 font-bold';
+                  labelTextClass = 'text-violet-950 dark:text-violet-100 font-bold';
                 } else if (isBalance) {
-                  rowBgClass =
-                    'bg-emerald-100/95 hover:bg-emerald-200/75 dark:bg-emerald-950/65 dark:hover:bg-emerald-900/75 text-emerald-950 dark:text-emerald-100 font-bold';
-                  labelTextClass = 'text-emerald-950 dark:text-emerald-100 font-bold';
+                  if (isNegativeBalance) {
+                    rowBgClass =
+                      'bg-rose-100/95 dark:bg-rose-950/70 text-rose-950 dark:text-rose-100 font-bold pb-balance-negative-pulse';
+                    labelTextClass = 'text-rose-950 dark:text-rose-100 font-bold';
+                  } else {
+                    rowBgClass =
+                      'bg-emerald-100/95 hover:bg-emerald-200/75 dark:bg-emerald-950/65 dark:hover:bg-emerald-900/75 text-emerald-950 dark:text-emerald-100 font-bold';
+                    labelTextClass = 'text-emerald-950 dark:text-emerald-100 font-bold';
+                  }
                 } else if (isMp2) {
                   rowBgClass =
                     'bg-amber-100/90 hover:bg-amber-200/70 dark:bg-amber-950/55 dark:hover:bg-amber-900/65 text-amber-950 dark:text-amber-100 font-bold';
@@ -1044,9 +1507,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                 const getSelectedCellClass = (selected: boolean) => {
                   if (!selected) return '';
                   if (isSpecialFillRow) {
-                    return 'ring-2 ring-slate-900 dark:ring-white ring-inset bg-black/5 dark:bg-white/10';
+                    return 'ring-2 ring-slate-800 dark:ring-white ring-inset bg-black/[0.04] dark:bg-white/[0.08]';
                   }
-                  return 'ring-2 ring-blue-600 dark:ring-blue-400 ring-inset bg-blue-50/50 dark:bg-blue-950/50';
+                  return 'ring-2 ring-emerald-600 dark:ring-emerald-400 ring-inset bg-emerald-50/45 dark:bg-emerald-950/35';
                 };
 
                 const rowMergeRanges = getEffectiveRowMergeRanges(rowId, row, effectiveColumnOrder);
@@ -1143,7 +1606,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                         setDraggedRowId(null);
                         setDragOverState(null);
                       }}
-                      className={`border-b border-slate-900 dark:border-slate-700 last:border-b-0 transition-colors duration-150 ${rowBgClass} ${
+                      className={`border-b border-slate-200/85 dark:border-slate-800/85 last:border-b-0 ${
+                        isTotal || isMetrobank ? 'border-t border-t-slate-300/85 dark:border-t-slate-600/85' : ''
+                      } transition-colors duration-150 ${rowBgClass} ${
                         isDraggingThisRow ? 'opacity-45 bg-emerald-50/40 dark:bg-emerald-950/30' : ''
                       } ${isDragOverAbove ? 'shadow-[inset_0_3px_0_0_#10b981]' : ''} ${
                         isDragOverBelow ? 'shadow-[inset_0_-3px_0_0_#10b981]' : ''
@@ -1166,24 +1631,25 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                         const borderRightClass = isLastCol
                           ? ''
                           : colId === 'payments'
-                          ? 'border-r-2 border-slate-900 dark:border-slate-700'
-                          : 'border-r border-slate-900 dark:border-slate-700';
+                          ? 'border-r border-slate-300/90 dark:border-slate-700/90'
+                          : 'border-r border-slate-200/80 dark:border-slate-800/85';
 
                         // 1. PAYMENTS COLUMN
                         if (colId === 'payments') {
                           return (
                             <td
                               key={colId}
+                              data-cell-key={`${rowId}::${colId}`}
                               onClick={() => handleCellClick(rowId, 'payments', row)}
                               onDoubleClick={() => handleCellDoubleClick(rowId, 'payments', row)}
-                              className={`py-0.5 sm:py-1 lg:py-1.5 px-1 sm:px-2 lg:px-3 ${borderRightClass} align-middle relative group cursor-pointer select-none leading-tight ${getSelectedCellClass(
+                              className={`${adaptive.cellPad} ${borderRightClass} align-middle relative group cursor-pointer select-none overflow-hidden ${getSelectedCellClass(
                                 isSelectedPayments
                               )}`}
                             >
                               {renderModernNoteIndicator(row.labelNote, rowId, 'payments', `${row.label} (Payment)`)}
 
-                              <div className="flex items-center justify-between gap-1">
-                                <div className="flex items-center flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 min-w-0">
+                                <div className="flex items-center flex-1 min-w-0 w-full">
                                   {editingLabelRowId === rowId ? (
                                     <input
                                       type="text"
@@ -1206,37 +1672,32 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                           setEditingLabelRowId(null);
                                         }
                                       }}
-                                      className="w-full text-xs lg:text-sm xl:text-[15px] font-bold px-1.5 py-0.5 border-2 border-slate-900 dark:border-slate-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded focus:outline-none"
+                                      className={`w-full ${adaptive.labelFont} font-semibold px-1.5 py-0.5 border border-emerald-600 dark:border-emerald-400 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/25`}
                                       onClick={(e) => e.stopPropagation()}
                                     />
                                   ) : (
                                     <div
                                       className="flex items-center gap-1.5 flex-1 min-w-0"
-                                      title="Click to select payment item, drag row to reorder, or double-click to rename"
+                                      title={
+                                        rowId === 'salary'
+                                          ? 'Click to select Salary & open Breakdown, or double-click to edit'
+                                          : 'Click to select payment item, drag row to reorder, or double-click to rename'
+                                      }
                                     >
                                       <span
-                                        className={`truncate font-bold text-xs lg:text-sm xl:text-[15px] ${labelTextClass} ${
+                                        className={`${adaptive.paymentWrap} font-semibold ${adaptive.labelFont} ${labelTextClass} ${
                                           isLoanEmpty ? 'italic text-slate-400 dark:text-slate-500 font-normal' : ''
                                         }`}
                                       >
-                                        {isLoanEmpty ? `${row.label} (Click Edit in popup to rename)` : row.label}
+                                        {isLoanEmpty
+                                          ? `${row.label} (Click Edit in popup to rename)`
+                                          : rowId === 'salary' || rowId === 'balance'
+                                          ? row.label.toUpperCase()
+                                          : row.label}
                                       </span>
                                     </div>
                                   )}
                                 </div>
-
-                                {rowId === 'salary' && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onOpenSalaryModal();
-                                    }}
-                                    title="Edit Base Salary + Previous Balance"
-                                    className="text-[9px] lg:text-xs text-white bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600 px-1.5 lg:px-2 py-0.5 rounded font-sans font-semibold shadow-2xs cursor-pointer transition-colors leading-none shrink-0 ml-1"
-                                  >
-                                    Breakdown
-                                  </button>
-                                )}
                               </div>
                             </td>
                           );
@@ -1274,6 +1735,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                           return (
                             <td
                               key={`merged_${activeMerge.columns.join('_')}`}
+                              data-cell-key={`${rowId}::${primaryCol}`}
                               colSpan={activeMerge.colSpan}
                               data-merged="true"
                               title={`Merged cell: ${activeMerge.columns
@@ -1285,18 +1747,18 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                               onDoubleClick={() =>
                                 handleMergedCellDoubleClick(rowId, row, primaryCol)
                               }
-                              className={`py-0.5 sm:py-1 lg:py-1.5 px-1 sm:px-2 lg:px-3 ${
-                                mergedEndIsLast ? '' : 'border-r border-slate-900 dark:border-slate-700'
-                              } align-middle relative cursor-pointer select-none ${
+                              className={`${adaptive.cellPad} ${
+                                mergedEndIsLast ? '' : 'border-r border-slate-200/80 dark:border-slate-800/85'
+                              } align-middle relative cursor-pointer select-none overflow-hidden ${
                                 isPrimaryCurrency ? 'text-right font-medium' : 'text-center font-medium'
-                              } leading-tight ${getSelectedCellClass(isSelectedThisMerge)}`}
+                              } ${getSelectedCellClass(isSelectedThisMerge)}`}
                             >
                               {renderModernNoteIndicator(mergedNote, rowId, primaryCol, mergedTitle)}
 
                               {isEditingThisMerge && !primaryMeta.isReadOnly ? (
-                                <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
+                                <div className={`flex items-center justify-between gap-0.5 w-full bg-white dark:bg-slate-950 border border-emerald-600 dark:border-emerald-400 rounded-md ${adaptive.editPad} shadow-2xs`}>
                                   {isPrimaryCurrency && (
-                                    <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">
+                                    <span className={`font-sans ${adaptive.symbolFont} text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium`}>
                                       {currencySymbolClean}
                                     </span>
                                   )}
@@ -1310,6 +1772,10 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                     }
                                     placeholder={isPrimaryCurrency ? '0.00' : 'Enter value'}
                                     onBlur={(e) => {
+                                      if (skipNextBlurRef.current) {
+                                        skipNextBlurRef.current = false;
+                                        return;
+                                      }
                                       if (primaryCol === 'monthly' || primaryCol === 'cutoff15th') {
                                         onUpdateCellInput(rowId, primaryCol, e.target.value);
                                       } else if (primaryCol === 'remarks') {
@@ -1329,9 +1795,29 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                       }
                                       setEditingCell(null);
                                     }}
-                                    onKeyDown={(e) => handleKeyDown(e, rowId, primaryCol)}
-                                    className={`w-full bg-transparent text-slate-900 dark:text-slate-100 text-xs lg:text-sm xl:text-[15px] focus:outline-none ${
-                                      isPrimaryCurrency ? 'text-right font-mono' : 'text-center font-sans'
+                                    onKeyDown={(e) =>
+                                      handleKeyDown(e, rowId, primaryCol, (val) => {
+                                        if (primaryCol === 'monthly' || primaryCol === 'cutoff15th') {
+                                          onUpdateCellInput(rowId, primaryCol, val);
+                                        } else if (primaryCol === 'remarks') {
+                                          onUpdateRemarks(
+                                            rowId,
+                                            rowId === 'metrobank' ? stripCurrencySymbols(val) : val
+                                          );
+                                        } else if (customPrimaryCol) {
+                                          onUpdateCustomCellInput?.(
+                                            rowId,
+                                            primaryCol,
+                                            val,
+                                            customPrimaryCol.type
+                                          );
+                                        }
+                                      })
+                                    }
+                                    className={`w-full bg-transparent text-slate-900 dark:text-slate-100 focus:outline-none ${
+                                      isPrimaryCurrency
+                                        ? `text-right font-mono tabular-nums ${adaptive.numFont}`
+                                        : `text-center font-sans ${adaptive.labelFont}`
                                     }`}
                                   />
                                 </div>
@@ -1348,8 +1834,18 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                               ) : primaryCol === 'remarks' ? (
                                 ['metrobank', 'total', 'salary', 'balance'].includes(rowId) ? (
                                   renderRemarksCurrency(row.remarks)
+                                ) : row.remarks === 'OK' || row.remarks === 'Settled' ? (
+                                  <span className={`inline-flex items-center justify-center gap-1 ${adaptive.remarksFont} font-semibold text-emerald-700 dark:text-emerald-300 tracking-tight max-w-full truncate`}>
+                                    <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 stroke-[2.5]" />
+                                    <span className="truncate">Settled</span>
+                                  </span>
+                                ) : row.remarks === 'Next Payroll' || row.remarks === 'Deferred' ? (
+                                  <span className={`inline-flex items-center justify-center gap-1 ${adaptive.remarksFont} font-semibold text-amber-800 dark:text-amber-300 tracking-tight max-w-full truncate`}>
+                                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 stroke-[2.25]" />
+                                    <span className="truncate">Deferred</span>
+                                  </span>
                                 ) : (
-                                  <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs lg:text-sm font-semibold">
+                                  <span className={`inline-flex items-center justify-center px-1 ${adaptive.remarksFont} font-medium text-slate-400 dark:text-slate-500 max-w-full truncate`}>
                                     {row.remarks || '—'}
                                   </span>
                                 )
@@ -1360,7 +1856,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                   rowId
                                 )
                               ) : (
-                                <span className="block truncate px-1 text-[11px] sm:text-xs lg:text-sm xl:text-[15px]">
+                                <span className={`block truncate px-0.5 ${adaptive.labelFont}`}>
                                   {row.customCells?.[primaryCol]?.rawInput || ''}
                                 </span>
                               )}
@@ -1373,28 +1869,37 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                           return (
                             <td
                               key={colId}
+                              data-cell-key={`${rowId}::${colId}`}
                               onClick={() => handleCellClick(rowId, 'monthly', row)}
                               onDoubleClick={() => handleCellDoubleClick(rowId, 'monthly', row)}
-                              className={`py-0.5 sm:py-1 lg:py-1.5 px-1 sm:px-2 lg:px-3 ${borderRightClass} align-middle relative cursor-pointer select-none text-right font-medium leading-tight ${getSelectedCellClass(
+                              className={`${adaptive.cellPad} ${borderRightClass} align-middle relative cursor-pointer select-none text-right font-medium overflow-hidden ${getSelectedCellClass(
                                 isSelectedMonthly
                               )}`}
                             >
                               {renderModernNoteIndicator(row.monthly?.note, rowId, 'monthly', `${row.label} (Monthly)`)}
 
                               {isEditingMonthly && !row.readOnlyMonthly ? (
-                                <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
-                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">{currencySymbolClean}</span>
+                                <div className={`flex items-center justify-between gap-0.5 w-full bg-white dark:bg-slate-950 border border-emerald-600 dark:border-emerald-400 rounded-md ${adaptive.editPad} shadow-2xs`}>
+                                  <span className={`font-sans ${adaptive.symbolFont} text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium`}>{currencySymbolClean}</span>
                                   <input
                                     type="text"
                                     autoFocus
                                     defaultValue={row.monthly?.rawInput || ''}
                                     placeholder="0.00"
                                     onBlur={(e) => {
+                                      if (skipNextBlurRef.current) {
+                                        skipNextBlurRef.current = false;
+                                        return;
+                                      }
                                       onUpdateCellInput(rowId, 'monthly', e.target.value);
                                       setEditingCell(null);
                                     }}
-                                    onKeyDown={(e) => handleKeyDown(e, rowId, 'monthly')}
-                                    className="w-full text-right bg-transparent text-slate-900 dark:text-slate-100 font-mono text-xs lg:text-sm xl:text-[15px] focus:outline-none"
+                                    onKeyDown={(e) =>
+                                      handleKeyDown(e, rowId, 'monthly', (val) =>
+                                        onUpdateCellInput(rowId, 'monthly', val)
+                                      )
+                                    }
+                                    className={`w-full text-right bg-transparent text-slate-900 dark:text-slate-100 font-mono tabular-nums ${adaptive.numFont} focus:outline-none`}
                                   />
                                 </div>
                               ) : (
@@ -1409,28 +1914,37 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                           return (
                             <td
                               key={colId}
+                              data-cell-key={`${rowId}::${colId}`}
                               onClick={() => handleCellClick(rowId, 'cutoff15th', row)}
                               onDoubleClick={() => handleCellDoubleClick(rowId, 'cutoff15th', row)}
-                              className={`py-0.5 sm:py-1 lg:py-1.5 px-1 sm:px-2 lg:px-3 ${borderRightClass} align-middle relative cursor-pointer select-none text-right font-medium leading-tight ${getSelectedCellClass(
+                              className={`${adaptive.cellPad} ${borderRightClass} align-middle relative cursor-pointer select-none text-right font-medium overflow-hidden ${getSelectedCellClass(
                                 isSelectedKinsenas
                               )}`}
                             >
                               {renderModernNoteIndicator(row.cutoff15th?.note, rowId, 'cutoff15th', `${row.label} (Kinsenas)`)}
 
                               {isEditingKinsenas && !row.readOnly15th ? (
-                                <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
-                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">{currencySymbolClean}</span>
+                                <div className={`flex items-center justify-between gap-0.5 w-full bg-white dark:bg-slate-950 border border-emerald-600 dark:border-emerald-400 rounded-md ${adaptive.editPad} shadow-2xs`}>
+                                  <span className={`font-sans ${adaptive.symbolFont} text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium`}>{currencySymbolClean}</span>
                                   <input
                                     type="text"
                                     autoFocus
                                     defaultValue={row.cutoff15th?.rawInput || ''}
                                     placeholder="0.00"
                                     onBlur={(e) => {
+                                      if (skipNextBlurRef.current) {
+                                        skipNextBlurRef.current = false;
+                                        return;
+                                      }
                                       onUpdateCellInput(rowId, 'cutoff15th', e.target.value);
                                       setEditingCell(null);
                                     }}
-                                    onKeyDown={(e) => handleKeyDown(e, rowId, 'cutoff15th')}
-                                    className="w-full text-right bg-transparent text-slate-900 dark:text-slate-100 font-mono text-xs lg:text-sm xl:text-[15px] focus:outline-none"
+                                    onKeyDown={(e) =>
+                                      handleKeyDown(e, rowId, 'cutoff15th', (val) =>
+                                        onUpdateCellInput(rowId, 'cutoff15th', val)
+                                      )
+                                    }
+                                    className={`w-full text-right bg-transparent text-slate-900 dark:text-slate-100 font-mono tabular-nums ${adaptive.numFont} focus:outline-none`}
                                   />
                                 </div>
                               ) : (
@@ -1445,8 +1959,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                           return (
                             <td
                               key={colId}
+                              data-cell-key={`${rowId}::${colId}`}
                               onClick={() => handleCellClick(rowId, 'remarks', row)}
-                              className={`py-0.5 sm:py-1 lg:py-1.5 px-1 sm:px-2 lg:px-3 ${borderRightClass} align-middle text-center relative leading-tight ${getSelectedCellClass(
+                              className={`${adaptive.cellPad} ${borderRightClass} align-middle text-center relative overflow-hidden ${getSelectedCellClass(
                                 isSelectedRemarks
                               )}`}
                             >
@@ -1463,52 +1978,57 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                       currentRemarks: row.remarks || '',
                                     });
                                   }}
-                                  className="flex items-center justify-center cursor-pointer py-0.5 group/rem"
-                                  title="Click to choose: OK, Next Payroll, or None"
+                                  className="flex items-center justify-center cursor-pointer py-0.5 group/rem min-w-0"
+                                  title="Click to choose: Settled, Deferred, or Clear"
                                 >
-                                  {row.remarks === 'OK' ? (
-                                    <span className="inline-flex items-center gap-1 text-[11px] lg:text-xs xl:text-sm font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 px-2.5 lg:px-3 py-0.5 rounded-md hover:bg-emerald-100 dark:hover:bg-emerald-900/70 transition-colors shadow-2xs">
-                                      <span>OK</span>
+                                  {row.remarks === 'OK' || row.remarks === 'Settled' ? (
+                                    <span className={`inline-flex items-center justify-center gap-1 ${adaptive.remarksFont} font-semibold text-emerald-700 dark:text-emerald-300 tracking-tight group-hover/rem:text-emerald-800 dark:group-hover/rem:text-emerald-200 transition-colors max-w-full truncate`}>
+                                      <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 stroke-[2.5]" />
+                                      <span className="truncate">Settled</span>
                                     </span>
-                                  ) : row.remarks === 'Next Payroll' ? (
-                                    <span className="inline-flex items-center gap-1 text-[11px] lg:text-xs xl:text-sm font-bold text-slate-900 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 px-2 lg:px-3 py-0.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shadow-2xs">
-                                      <span>Next Payroll</span>
+                                  ) : row.remarks === 'Next Payroll' || row.remarks === 'Deferred' ? (
+                                    <span className={`inline-flex items-center justify-center gap-1 ${adaptive.remarksFont} font-semibold text-amber-800 dark:text-amber-300 tracking-tight group-hover/rem:text-amber-900 dark:group-hover/rem:text-amber-200 transition-colors max-w-full truncate`}>
+                                      <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 stroke-[2.25]" />
+                                      <span className="truncate">Deferred</span>
                                     </span>
                                   ) : (
                                     <span
-                                      className={`text-[11px] lg:text-xs xl:text-sm italic transition-colors px-1 py-0.5 ${
+                                      className={`${adaptive.remarksFont} font-medium transition-colors px-1 py-0.5 truncate max-w-full ${
                                         isSpecialFillRow
-                                          ? 'text-slate-600 dark:text-slate-300/80 hover:text-slate-900 dark:hover:text-white'
+                                          ? 'text-slate-600/80 dark:text-slate-300/75 hover:text-slate-900 dark:hover:text-white'
                                           : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
                                       }`}
                                     >
-                                      None
+                                      —
                                     </span>
                                   )}
                                 </div>
                               )}
 
                               {rowId === 'metrobank' && (
-                                <div className="w-full px-1">
+                                <div className="w-full min-w-0">
                                   {isEditingRemarks ? (
-                                    <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
-                                      <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">{currencySymbolClean}</span>
+                                    <div className={`flex items-center justify-between gap-0.5 w-full bg-white dark:bg-slate-950 border border-emerald-600 dark:border-emerald-400 rounded-md ${adaptive.editPad} shadow-2xs`}>
+                                      <span className={`font-sans ${adaptive.symbolFont} text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium`}>{currencySymbolClean}</span>
                                       <input
                                         type="text"
                                         autoFocus
                                         defaultValue={stripCurrencySymbols(row.remarks || '')}
                                         placeholder="0.00"
                                         onBlur={(e) => {
+                                          if (skipNextBlurRef.current) {
+                                            skipNextBlurRef.current = false;
+                                            return;
+                                          }
                                           onUpdateRemarks(rowId, stripCurrencySymbols(e.target.value));
                                           setEditingCell(null);
                                         }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            onUpdateRemarks(rowId, stripCurrencySymbols(e.currentTarget.value));
-                                            setEditingCell(null);
-                                          }
-                                        }}
-                                        className="w-full text-right bg-transparent text-slate-900 dark:text-slate-100 font-mono text-xs lg:text-sm xl:text-[15px] focus:outline-none"
+                                        onKeyDown={(e) =>
+                                          handleKeyDown(e, rowId, 'remarks', (val) =>
+                                            onUpdateRemarks(rowId, stripCurrencySymbols(val))
+                                          )
+                                        }
+                                        className={`w-full text-right bg-transparent text-slate-900 dark:text-slate-100 font-mono tabular-nums ${adaptive.numFont} focus:outline-none`}
                                       />
                                     </div>
                                   ) : (
@@ -1518,7 +2038,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                         onSelectCell(null as any, null as any, '', '');
                                         setEditingCell({ rowId, column: 'remarks' });
                                       }}
-                                      className="w-full cursor-text py-0.5"
+                                      className="w-full cursor-text py-0.5 min-w-0"
                                       title="Click to input actual withdrawn money"
                                     >
                                       {renderRemarksCurrency(row.remarks)}
@@ -1528,7 +2048,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                               )}
 
                               {['total', 'salary', 'balance'].includes(rowId) && (
-                                <div className="w-full px-1">
+                                <div className="w-full min-w-0">
                                   {renderRemarksCurrency(row.remarks)}
                                 </div>
                               )}
@@ -1548,9 +2068,10 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                         return (
                           <td
                             key={colId}
+                            data-cell-key={`${rowId}::${colId}`}
                             onClick={() => handleCellClick(rowId, colId, row)}
                             onDoubleClick={() => handleCellDoubleClick(rowId, colId, row)}
-                            className={`py-0.5 sm:py-1 lg:py-1.5 px-1 sm:px-2 lg:px-3 ${borderRightClass} align-middle relative cursor-pointer select-none leading-tight ${
+                            className={`${adaptive.cellPad} ${borderRightClass} align-middle relative cursor-pointer select-none overflow-hidden ${
                               customCol.type === 'currency' ? 'text-right font-medium' : 'text-center font-normal'
                             } ${getSelectedCellClass(isSelectedCustom)}`}
                           >
@@ -1562,9 +2083,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             )}
 
                             {isEditingCustom ? (
-                              <div className="flex items-center justify-between w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-400 rounded-xs px-1.5 py-0.5 shadow-2xs">
+                              <div className={`flex items-center justify-between gap-0.5 w-full bg-white dark:bg-slate-950 border border-emerald-600 dark:border-emerald-400 rounded-md ${adaptive.editPad} shadow-2xs`}>
                                 {customCol.type === 'currency' && (
-                                  <span className="font-sans text-xs lg:text-sm xl:text-[15px] text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium">
+                                  <span className={`font-sans ${adaptive.symbolFont} text-slate-500 dark:text-slate-400 select-none shrink-0 font-medium`}>
                                     {currencySymbolClean}
                                   </span>
                                 )}
@@ -1574,19 +2095,29 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                                   defaultValue={customCell?.rawInput || ''}
                                   placeholder={customCol.type === 'currency' ? '0.00' : 'Enter text'}
                                   onBlur={(e) => {
+                                    if (skipNextBlurRef.current) {
+                                      skipNextBlurRef.current = false;
+                                      return;
+                                    }
                                     onUpdateCustomCellInput?.(rowId, colId, e.target.value, customCol.type);
                                     setEditingCell(null);
                                   }}
-                                  onKeyDown={(e) => handleKeyDown(e, rowId, colId)}
-                                  className={`w-full bg-transparent text-slate-900 dark:text-slate-100 text-xs lg:text-sm xl:text-[15px] focus:outline-none ${
-                                    customCol.type === 'currency' ? 'text-right font-mono' : 'text-center font-sans'
+                                  onKeyDown={(e) =>
+                                    handleKeyDown(e, rowId, colId, (val) =>
+                                      onUpdateCustomCellInput?.(rowId, colId, val, customCol.type)
+                                    )
+                                  }
+                                  className={`w-full bg-transparent text-slate-900 dark:text-slate-100 focus:outline-none ${
+                                    customCol.type === 'currency'
+                                      ? `text-right font-mono tabular-nums ${adaptive.numFont}`
+                                      : `text-center font-sans ${adaptive.labelFont}`
                                   }`}
                                 />
                               </div>
                             ) : customCol.type === 'currency' ? (
                               renderCurrencyCell(customCell?.value || 0, customCell?.rawInput || '', rowId)
                             ) : (
-                              <span className="block truncate px-1 text-[11px] sm:text-xs lg:text-sm xl:text-[15px]">
+                              <span className={`block truncate px-0.5 ${adaptive.labelFont}`}>
                                 {customCell?.rawInput || ''}
                               </span>
                             )}
@@ -1606,7 +2137,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
       {activeCell && !editingCell && !editingLabelRowId && (
         <div
           ref={activeCellPopupRef}
-          className="fixed pb-floating-bottom left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white px-3.5 lg:px-4 py-1.5 lg:py-2 rounded-full shadow-2xl border border-slate-700 dark:border-slate-600 flex items-center gap-2 lg:gap-2.5 text-xs lg:text-sm select-none animate-in slide-in-from-bottom-3 duration-150 max-w-[94vw] overflow-x-auto"
+          className="fixed pb-floating-bottom left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white px-3.5 sm:px-4 py-2 rounded-full shadow-2xl border border-slate-700 dark:border-slate-600 flex items-center gap-2 lg:gap-2.5 text-xs sm:text-[13px] lg:text-sm select-none animate-in slide-in-from-bottom-3 duration-150 max-w-[94vw] overflow-x-auto"
         >
           {(() => {
             const activeRowObj = rows[activeCell.rowId];
@@ -1629,25 +2160,25 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                 {(!['qr_ph', 'metrobank', 'total', 'salary', 'balance'].includes(activeCell.rowId) ||
                   Boolean(customColMap[activeCell.column]) ||
                   Boolean(activeMergeMatch)) && (
-                  <div className="flex items-center gap-1.5 max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] truncate pr-2 border-r border-slate-700 dark:border-slate-600">
+                  <div className="flex items-center gap-1.5 max-w-[170px] sm:max-w-[230px] lg:max-w-[300px] truncate pr-2 border-r border-slate-700 dark:border-slate-600">
                     {activeMergeMatch ? (
-                      <span className="text-[10px] lg:text-xs text-sky-400 font-mono uppercase font-bold shrink-0">
+                      <span className="text-[11px] sm:text-xs text-sky-400 font-mono uppercase font-bold shrink-0">
                         Merged:
                       </span>
                     ) : activeCell.column === 'payments' ? (
-                      <span className="text-[10px] lg:text-xs text-emerald-400 font-mono uppercase font-bold shrink-0">
+                      <span className="text-[11px] sm:text-xs text-emerald-400 font-mono uppercase font-bold shrink-0">
                         Item:
                       </span>
                     ) : activeCell.column === 'remarks' ? (
-                      <span className="text-[10px] lg:text-xs text-emerald-400 font-mono uppercase font-bold shrink-0">
+                      <span className="text-[11px] sm:text-xs text-emerald-400 font-mono uppercase font-bold shrink-0">
                         Remarks:
                       </span>
                     ) : customColMap[activeCell.column] ? (
-                      <span className="text-[10px] lg:text-xs text-sky-400 font-mono uppercase font-bold truncate max-w-[90px]">
+                      <span className="text-[11px] sm:text-xs text-sky-400 font-mono uppercase font-bold truncate max-w-[90px]">
                         {customColMap[activeCell.column].label}:
                       </span>
                     ) : null}
-                    <span className="font-semibold text-slate-200 truncate text-[11px] sm:text-xs lg:text-sm">
+                    <span className="font-semibold text-slate-100 truncate text-xs sm:text-[13px] lg:text-sm">
                       {activeCell.rowLabel}
                     </span>
                   </div>
@@ -1853,9 +2384,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               </button>
             </div>
 
-            {/* The 3 Options: OK, Next Payroll, None in high-speed 3-column tactile grid */}
+            {/* The 3 Options: Settled, Deferred, Clear in high-speed 3-column tactile grid */}
             <div className="grid grid-cols-3 gap-2">
-              {/* Option 1: OK */}
+              {/* Option 1: Settled */}
               <button
                 type="button"
                 onClick={() => {
@@ -1863,16 +2394,17 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   setRemarksPopupTarget(null);
                 }}
                 className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-lg border text-xs lg:text-sm font-bold transition-all cursor-pointer ${
-                  remarksPopupTarget.currentRemarks === 'OK'
+                  remarksPopupTarget.currentRemarks === 'OK' ||
+                  remarksPopupTarget.currentRemarks === 'Settled'
                     ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
                     : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
                 }`}
               >
                 <Check className="w-4 h-4 mb-0.5" />
-                <span>OK</span>
+                <span>Settled</span>
               </button>
 
-              {/* Option 2: Next Payroll */}
+              {/* Option 2: Deferred */}
               <button
                 type="button"
                 onClick={() => {
@@ -1880,16 +2412,17 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                   setRemarksPopupTarget(null);
                 }}
                 className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-lg border text-xs lg:text-sm font-bold transition-all cursor-pointer ${
-                  remarksPopupTarget.currentRemarks === 'Next Payroll'
-                    ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                    : 'bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60'
+                  remarksPopupTarget.currentRemarks === 'Next Payroll' ||
+                  remarksPopupTarget.currentRemarks === 'Deferred'
+                    ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                    : 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60'
                 }`}
               >
                 <Clock className="w-4 h-4 mb-0.5" />
-                <span className="text-[10px] lg:text-xs leading-tight text-center">Next Payroll</span>
+                <span>Deferred</span>
               </button>
 
-              {/* Option 3: None */}
+              {/* Option 3: Clear (—) */}
               <button
                 type="button"
                 onClick={() => {
@@ -1903,7 +2436,7 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                 }`}
               >
                 <X className="w-4 h-4 mb-0.5" />
-                <span>None</span>
+                <span>Clear</span>
               </button>
             </div>
           </div>

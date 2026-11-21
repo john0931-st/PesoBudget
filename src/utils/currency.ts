@@ -141,7 +141,7 @@ export function formatCurrency(
     if (useParenthesesForNegative) {
       return `(${symbolText}${formattedNumber})`;
     }
-    return `-${symbolText}${formattedNumber}`;
+    return `${symbolText}-${formattedNumber}`;
   }
 
   return `${symbolText}${formattedNumber}`;

@@ -16,6 +16,9 @@ interface ActionMessageModalProps {
   message: string;
   detail?: string;
   onClose: () => void;
+  onConfirm?: () => void;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export const ActionMessageModal: React.FC<ActionMessageModalProps> = ({
@@ -25,19 +28,30 @@ export const ActionMessageModal: React.FC<ActionMessageModalProps> = ({
   message,
   detail,
   onClose,
+  onConfirm,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
 }) => {
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'Enter') {
+      if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
         onClose();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onConfirm) {
+          onConfirm();
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, onConfirm]);
 
   if (!isOpen) return null;
 
@@ -116,15 +130,35 @@ export const ActionMessageModal: React.FC<ActionMessageModalProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              autoFocus
-              className={`px-6 py-2 text-xs lg:text-sm font-bold text-white rounded-lg shadow-xs cursor-pointer transition-colors ${theme.buttonBg}`}
-            >
-              OK
-            </button>
+          <div className="flex items-center justify-end gap-2">
+            {onConfirm ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer transition-colors"
+                >
+                  {cancelLabel}
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirm}
+                  autoFocus
+                  className={`px-5 py-2 text-xs lg:text-sm font-bold text-white rounded-lg shadow-xs cursor-pointer transition-colors ${theme.buttonBg}`}
+                >
+                  {confirmLabel}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                autoFocus
+                className={`px-6 py-2 text-xs lg:text-sm font-bold text-white rounded-lg shadow-xs cursor-pointer transition-colors ${theme.buttonBg}`}
+              >
+                OK
+              </button>
+            )}
           </div>
         </div>
       </div>

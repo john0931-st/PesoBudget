@@ -11,12 +11,12 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
   - **Metrobank**: Auto-sums cash obligations (House/Rent, Loans, Utilities, Meals, Load, Others) and tracks actual ATM cash withdrawn in Remarks.
   - **QR PH**: Tracks digital / QR PH payments included automatically in combined totals.
   - **Total**: Automatically computes `Metrobank + QR PH`.
-  - **Salary Breakdown & Balance**: Automatically computes `(Salary - Total) - (Pag-IBIG MP2 + GoTyme)`.
-- **Flexible Sheet Customization**:
-  - Inline formula editing (`=1200+450`) and dedicated **Edit Formula (`fx`)** modal.
-  - **Merge & Unmerge Cells ("Where to Merge")** across contiguous data columns from the floating cell bar or the table title `⋮` menu.
-  - Custom line items, custom currency/text columns, cell sticky notes, and **OK / Next Payroll / None** remarks selector.
-- **Analytics & Audit History**: Interactive **Summary** cards, **Charts** visualizations, and a timestamped **Audit Change Log**.
+  - **Salary Breakdown & Balance**: Displays a distinct Violet **Salary** row (tap to open **Breakdown** in the floating action bar) and automatically computes `(Salary - Total) - (Pag-IBIG MP2 + GoTyme)` on the **Balance** row with a soft pulsing Rose alert whenever negative.
+- **Flexible & Adaptive Sheet Workspace**:
+  - Adaptive screen-resolution table sizing and typography from mobile to desktop with clean vertical-only scrolling.
+  - Drag-and-drop and floating bar Up/Down arrow controls to reorder expense rows manually with smooth animations.
+  - Inline formula editing (`=1200+450`), dedicated **Edit Formula (`fx`)** modal, **Merge & Unmerge Cells**, custom rows/columns, cell sticky notes, international **Currency Switcher**, and modern fintech **Settled / Deferred / Clear (`—`)** bill remarks.
+- **Analytics, Sync & Audit History**: Interactive **Summary** cards, **Charts** visualizations, centered live KPI metrics strip, real-time **Auto-Save & Sync** status badge, and a timestamped **Audit Change Log**.
 - **Light / Dark Theme & PWA Support**: Instant Light/Dark mode switch, offline queue, and installable Progressive Web App support.
 - **Automatic Release Updates**: Builds automatically compute semantic versions, Asia/Manila timestamps, and release changelogs (`dist/version.json`) with a public-link **What Changed** popup.
 

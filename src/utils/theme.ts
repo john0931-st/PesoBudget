@@ -3,7 +3,7 @@ export type ThemeMode = 'light' | 'dark';
 export const THEME_STORAGE_KEY = 'pesobudget_theme_v1';
 
 export function getStoredTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'light';
+  if (typeof window === 'undefined') return 'dark';
   try {
     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (saved === 'dark' || saved === 'light') {
@@ -12,7 +12,7 @@ export function getStoredTheme(): ThemeMode {
   } catch {
     // Ignore storage access errors in private contexts
   }
-  return 'light';
+  return 'dark';
 }
 
 export function applyTheme(theme: ThemeMode, persist = true): ThemeMode {

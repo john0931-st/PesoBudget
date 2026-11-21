@@ -34,6 +34,7 @@ import {
   Lock,
   Zap,
 } from 'lucide-react';
+import { ActionMessageModal } from './ActionMessageModal';
 
 interface SecurityModalProps {
   // Whether the security modal dialog is visible
@@ -69,6 +70,8 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // Stored list of Google Cloud backup snapshots
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>(() => getCloudBackups());
+  // Pending snapshot awaiting in-app confirmation
+  const [pendingRestoreBackup, setPendingRestoreBackup] = useState<CloudBackupRecord | null>(null);
 
   // If modal is not open, do not render
   if (!isOpen) return null;
@@ -91,20 +94,22 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
   };
 
   /**
-   * Restores a selected historical snapshot from Google Cloud.
+   * Prompts in-app confirmation before restoring a selected historical snapshot from Google Cloud.
    */
   const handleRestore = (backup: CloudBackupRecord) => {
-    const formattedDate = new Date(backup.timestamp).toLocaleString();
-    if (window.confirm(`Restore data from backup created on ${formattedDate}? Current changes will be updated.`)) {
-      // Apply restored months to the app
-      onRestoreBackup(backup.data);
-      setStatusMsg({
-        type: 'success',
-        text: `Restored ${backup.monthsCount} months from Google Cloud backup!`,
-      });
-      // Close modal after brief delay
-      setTimeout(() => onClose(), 1200);
-    }
+    setPendingRestoreBackup(backup);
+  };
+
+  const handleConfirmRestore = () => {
+    if (!pendingRestoreBackup) return;
+    const backup = pendingRestoreBackup;
+    setPendingRestoreBackup(null);
+    onRestoreBackup(backup.data);
+    setStatusMsg({
+      type: 'success',
+      text: `Restored ${backup.monthsCount} months from Google Cloud backup!`,
+    });
+    setTimeout(() => onClose(), 1200);
   };
 
   /**
@@ -554,6 +559,25 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
           </button>
         </div>
       </div>
+
+      <ActionMessageModal
+        isOpen={Boolean(pendingRestoreBackup)}
+        variant="info"
+        title="Restore Cloud Backup Snapshot?"
+        message={
+          pendingRestoreBackup
+            ? `Restore data from backup created on ${new Date(pendingRestoreBackup.timestamp).toLocaleString()}?`
+            : ''
+        }
+        detail={
+          pendingRestoreBackup
+            ? `${pendingRestoreBackup.monthsCount} sheet(s) will replace your active local workbook state.`
+            : undefined
+        }
+        confirmLabel="Restore Snapshot"
+        onConfirm={handleConfirmRestore}
+        onClose={() => setPendingRestoreBackup(null)}
+      />
     </div>
   );
 };

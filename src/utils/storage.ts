@@ -149,13 +149,13 @@ export const ROW_CONFIG: Record<
     remarksType: 'auto',
   },
   salary: {
-    label: 'Salary',
+    label: 'SALARY',
     description: 'Base salary plus carried previous balance',
     rowType: 'income',
     remarksType: 'auto',
   },
   balance: {
-    label: 'Balance',
+    label: 'BALANCE',
     description: 'Formula: (Salary - Total) - (MP2 + Gotyme)',
     rowType: 'balance',
     remarksType: 'auto',
@@ -175,7 +175,7 @@ export const ROW_CONFIG: Record<
 };
 
 /**
- * Creates default month populated with the exact figures from user's Excel spreadsheet screenshot
+ * Creates a neutral sample month template with generic placeholder amounts
  */
 export function createDefaultMonth(id = '2026-10', name = 'October 2026'): MonthData {
   const baseMonth: MonthData = {
@@ -183,11 +183,11 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
     name,
     salaryBreakdown: {
       monthly: {
-        baseSalary: 13406.16,
+        baseSalary: 24000,
         previousBalance: 0,
       },
       cutoff15th: {
-        baseSalary: 6703.08,
+        baseSalary: 12000,
         previousBalance: 0,
       },
     },
@@ -196,7 +196,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'rent',
         label: 'House',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 2500, rawInput: '2500' },
+        cutoff15th: { value: 4500, rawInput: '4500' },
         remarks: 'OK',
         rowType: 'expense',
       },
@@ -211,7 +211,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
       water_bill: {
         id: 'water_bill',
         label: 'Water Bill',
-        monthly: { value: 310, rawInput: '310' },
+        monthly: { value: 450, rawInput: '450' },
         cutoff15th: { value: 0, rawInput: '' },
         remarks: 'OK',
         rowType: 'expense',
@@ -228,7 +228,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'gas',
         label: 'Gas',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 510, rawInput: '510' },
+        cutoff15th: { value: 600, rawInput: '600' },
         remarks: 'OK',
         rowType: 'expense',
       },
@@ -236,7 +236,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'meal',
         label: 'Meal',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 510, rawInput: '510' },
+        cutoff15th: { value: 2000, rawInput: '2000' },
         remarks: 'OK',
         rowType: 'expense',
       },
@@ -244,7 +244,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'mobile_load',
         label: 'Mobile Load',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 0, rawInput: '' },
+        cutoff15th: { value: 300, rawInput: '300' },
         remarks: '',
         rowType: 'expense',
       },
@@ -252,14 +252,14 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'others',
         label: 'Others',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 2452, rawInput: '=1200+852+400', formula: '=1200+852+400' },
+        cutoff15th: { value: 800, rawInput: '=500+300', formula: '=500+300' },
         remarks: 'OK',
         rowType: 'expense',
       },
       lazada: {
         id: 'lazada',
         label: 'Lazada',
-        monthly: { value: 1015.08, rawInput: '1015.08' },
+        monthly: { value: 750, rawInput: '750' },
         cutoff15th: { value: 0, rawInput: '' },
         remarks: 'OK',
         rowType: 'expense',
@@ -268,7 +268,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'qr_ph',
         label: 'QR PH',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 1015.08, rawInput: '1015.08' },
+        cutoff15th: { value: 750, rawInput: '750' },
         remarks: 'OK',
         rowType: 'digital_payment',
       },
@@ -276,8 +276,8 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'metrobank',
         label: 'METROBANK',
         monthly: { value: 0, rawInput: '0' },
-        cutoff15th: { value: 6282, rawInput: '6282' },
-        remarks: '6282.00',
+        cutoff15th: { value: 8650, rawInput: '8650' },
+        remarks: '8650.00',
         rowType: 'bank_subtotal',
         readOnlyMonthly: true,
         readOnly15th: true,
@@ -286,26 +286,26 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'total',
         label: 'TOTAL',
         monthly: { value: 0, rawInput: '0' },
-        cutoff15th: { value: 7297.08, rawInput: '7297.08' },
-        remarks: '₱ 7,297.08',
+        cutoff15th: { value: 9400, rawInput: '9400' },
+        remarks: '₱ 9,400.00',
         rowType: 'grand_total',
         readOnlyMonthly: true,
         readOnly15th: true,
       },
       salary: {
         id: 'salary',
-        label: 'Salary',
-        monthly: { value: 13406.16, rawInput: '13406.16' },
-        cutoff15th: { value: 6703.08, rawInput: '6703.08' },
-        remarks: '₱ 6,703.08',
+        label: 'SALARY',
+        monthly: { value: 24000, rawInput: '24000' },
+        cutoff15th: { value: 12000, rawInput: '12000' },
+        remarks: '₱ 12,000.00',
         rowType: 'income',
       },
       balance: {
         id: 'balance',
-        label: 'Balance',
+        label: 'BALANCE',
         monthly: { value: 0, rawInput: '0' },
-        cutoff15th: { value: -1609.0, rawInput: '-1609.00' },
-        remarks: '-₱ 1,609.00',
+        cutoff15th: { value: 600, rawInput: '600.00' },
+        remarks: '₱ 600.00',
         rowType: 'balance',
         readOnlyMonthly: true,
         readOnly15th: true,
@@ -314,7 +314,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'mp2',
         label: 'MP2',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 505, rawInput: '505' },
+        cutoff15th: { value: 1000, rawInput: '1000' },
         remarks: 'OK',
         rowType: 'savings',
       },
@@ -322,7 +322,7 @@ export function createDefaultMonth(id = '2026-10', name = 'October 2026'): Month
         id: 'gotyme',
         label: 'GOTYME',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 510, rawInput: '510' },
+        cutoff15th: { value: 1000, rawInput: '1000' },
         remarks: 'OK',
         rowType: 'savings',
       },
@@ -538,12 +538,12 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
     sheetTitle: 'OCTOBER 2026',
     salaryBreakdown: {
       monthly: {
-        baseSalary: 13406.16,
-        previousBalance: -1609.00,
+        baseSalary: 24000,
+        previousBalance: 600,
       },
       cutoff15th: {
-        baseSalary: 6703.08,
-        previousBalance: -1609.00,
+        baseSalary: 12000,
+        previousBalance: 600,
       },
     },
     rows: {
@@ -574,8 +574,8 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
       electric_bill: {
         id: 'electric_bill',
         label: 'Electricity Bill',
-        monthly: { value: 1850, rawInput: '1850' },
-        cutoff15th: { value: 1850, rawInput: '1850' },
+        monthly: { value: 1800, rawInput: '1800' },
+        cutoff15th: { value: 1800, rawInput: '1800' },
         remarks: 'OK',
         rowType: 'expense',
       },
@@ -591,7 +591,7 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
         id: 'meal',
         label: 'Meal',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 650, rawInput: '650' },
+        cutoff15th: { value: 1200, rawInput: '1200' },
         remarks: 'OK',
         rowType: 'expense',
       },
@@ -607,7 +607,7 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
         id: 'others',
         label: 'Others',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 550, rawInput: '550' },
+        cutoff15th: { value: 500, rawInput: '500' },
         remarks: 'OK',
         rowType: 'expense',
       },
@@ -631,8 +631,8 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
         id: 'metrobank',
         label: 'METROBANK',
         monthly: { value: 0, rawInput: '0' },
-        cutoff15th: { value: 3350, rawInput: '3350' },
-        remarks: '3350.00',
+        cutoff15th: { value: 3800, rawInput: '3800' },
+        remarks: '3800.00',
         rowType: 'bank_subtotal',
         readOnlyMonthly: true,
         readOnly15th: true,
@@ -641,26 +641,26 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
         id: 'total',
         label: 'TOTAL',
         monthly: { value: 0, rawInput: '0' },
-        cutoff15th: { value: 3800, rawInput: '3800' },
-        remarks: '₱ 3,800.00',
+        cutoff15th: { value: 4250, rawInput: '4250' },
+        remarks: '₱ 4,250.00',
         rowType: 'grand_total',
         readOnlyMonthly: true,
         readOnly15th: true,
       },
       salary: {
         id: 'salary',
-        label: 'Salary',
-        monthly: { value: 13406.16, rawInput: '13406.16' },
-        cutoff15th: { value: 5094.08, rawInput: '5094.08' },
-        remarks: '₱ 5,094.08',
+        label: 'SALARY',
+        monthly: { value: 24000, rawInput: '24000' },
+        cutoff15th: { value: 12600, rawInput: '12600' },
+        remarks: '₱ 12,600.00',
         rowType: 'income',
       },
       balance: {
         id: 'balance',
-        label: 'Balance',
+        label: 'BALANCE',
         monthly: { value: 0, rawInput: '0' },
-        cutoff15th: { value: 279.08, rawInput: '279.08' },
-        remarks: '₱ 279.08',
+        cutoff15th: { value: 6350, rawInput: '6350.00' },
+        remarks: '₱ 6,350.00',
         rowType: 'balance',
         readOnlyMonthly: true,
         readOnly15th: true,
@@ -669,7 +669,7 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
         id: 'mp2',
         label: 'MP2',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 505, rawInput: '505' },
+        cutoff15th: { value: 1000, rawInput: '1000' },
         remarks: 'OK',
         rowType: 'savings',
       },
@@ -677,7 +677,7 @@ export function createPairedDefaultMonths(): Record<string, MonthData> {
         id: 'gotyme',
         label: 'GOTYME',
         monthly: { value: 0, rawInput: '' },
-        cutoff15th: { value: 510, rawInput: '510' },
+        cutoff15th: { value: 1000, rawInput: '1000' },
         remarks: 'OK',
         rowType: 'savings',
       },
@@ -734,26 +734,23 @@ export function loadSavedMonths(): Record<string, MonthData> {
       if (firstId) setActiveMonthId(firstId);
       return initial;
     }
-    const SAMPLE_DATA_NOTES = new Set([
+    const SAMPLE_DATA_NOTE_PREFIXES = [
       'Submeter water bill reading',
-      'Maynilad / submeter reading',
-      'Meralco reading deferred to next cutoff',
       'Electricity bill deferred',
-      'Meralco paid in 2nd cutoff',
-      'Multiple items: =1200+852+400',
       'Online shopping bill (paid via QR PH)',
-      'Digital payment method for Lazada (not an expense)',
+      'Digital payment method for Lazada',
       'Withdrawn money (ATM cash for bills)',
-      'Actual Metrobank ATM cash withdrawn: ₱6,282.00',
-      'Actual Metrobank ATM cash withdrawn: ₱3,350.00',
-      'Pag-IBIG Modified MP2 Voluntary Savings',
+      'Actual Metrobank ATM cash withdrawn:',
+      'Pag-IBIG Modified MP2',
       'Pag-IBIG MP2 payment',
-      'GoTyme Bank Go Save Stash',
+      'GoTyme Bank Go Save',
       'GoTyme Stash deposit',
       'Full month gross/net',
       'Kinsenas payroll allocation',
-      'Carried over balance from Cutoff 1: -₱1,609.00',
-    ]);
+      'Carried over balance from Cutoff 1:',
+    ];
+    const isLegacySampleNote = (note?: string) =>
+      Boolean(note && SAMPLE_DATA_NOTE_PREFIXES.some((prefix) => note.startsWith(prefix)));
 
     const parsed = JSON.parse(raw);
     if (typeof parsed === 'object' && Object.keys(parsed).length > 0) {
@@ -776,31 +773,38 @@ export function loadSavedMonths(): Record<string, MonthData> {
         if (monthObj.rows.qr_ph) {
           monthObj.rows.qr_ph.rowType = 'digital_payment';
         }
+        // Ensure SALARY and BALANCE labels are uppercase
+        if (monthObj.rows.salary && monthObj.rows.salary.label === 'Salary') {
+          monthObj.rows.salary.label = 'SALARY';
+        }
+        if (monthObj.rows.balance && monthObj.rows.balance.label === 'Balance') {
+          monthObj.rows.balance.label = 'BALANCE';
+        }
 
         // Remove any legacy pre-populated sample-data notes while preserving all user-written notes
-        if (monthObj.salaryBreakdown?.monthly?.note && SAMPLE_DATA_NOTES.has(monthObj.salaryBreakdown.monthly.note)) {
+        if (isLegacySampleNote(monthObj.salaryBreakdown?.monthly?.note)) {
           delete monthObj.salaryBreakdown.monthly.note;
           strippedAnySampleNote = true;
         }
-        if (monthObj.salaryBreakdown?.cutoff15th?.note && SAMPLE_DATA_NOTES.has(monthObj.salaryBreakdown.cutoff15th.note)) {
+        if (isLegacySampleNote(monthObj.salaryBreakdown?.cutoff15th?.note)) {
           delete monthObj.salaryBreakdown.cutoff15th.note;
           strippedAnySampleNote = true;
         }
         for (const row of Object.values(monthObj.rows)) {
           if (!row) continue;
-          if (row.labelNote && SAMPLE_DATA_NOTES.has(row.labelNote)) {
+          if (isLegacySampleNote(row.labelNote)) {
             delete row.labelNote;
             strippedAnySampleNote = true;
           }
-          if (row.remarksNote && SAMPLE_DATA_NOTES.has(row.remarksNote)) {
+          if (isLegacySampleNote(row.remarksNote)) {
             delete row.remarksNote;
             strippedAnySampleNote = true;
           }
-          if (row.monthly?.note && SAMPLE_DATA_NOTES.has(row.monthly.note)) {
+          if (isLegacySampleNote(row.monthly?.note)) {
             delete row.monthly.note;
             strippedAnySampleNote = true;
           }
-          if (row.cutoff15th?.note && SAMPLE_DATA_NOTES.has(row.cutoff15th.note)) {
+          if (isLegacySampleNote(row.cutoff15th?.note)) {
             delete row.cutoff15th.note;
             strippedAnySampleNote = true;
           }

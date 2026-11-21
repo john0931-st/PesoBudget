@@ -76,6 +76,7 @@ import {
 } from './utils/cellMerge';
 import { getStoredTheme, toggleStoredTheme, ThemeMode } from './utils/theme';
 import { UpdateChangesModal, ReleaseNoteEntry } from './components/UpdateChangesModal';
+import { ActionMessageModal, ActionMessageVariant } from './components/ActionMessageModal';
 import releaseNotesData from './data/releaseNotes.json';
 
 import {
@@ -115,6 +116,18 @@ const LATEST_RELEASE: ReleaseNoteEntry = RELEASE_NOTES[0] || {
   title: 'Application Update',
   changes: ['Updated features and improvements.'],
 };
+
+// Locked attribution constant: read-only, non-configurable, and non-editable in UI.
+const LOCKED_AUTHOR_FOOTER: Readonly<{ text: string }> = (() => {
+  const obj = {} as { text: string };
+  Object.defineProperty(obj, 'text', {
+    value: 'Developed by John Archie Padrigo with Google AI Studio © 2026',
+    writable: false,
+    enumerable: true,
+    configurable: false,
+  });
+  return Object.freeze(obj);
+})();
 
 export default function App() {
   const { currencyCode, currency, setCurrency } = useCurrency();
@@ -298,6 +311,22 @@ export default function App() {
 
   const [connectedDataFolder, setConnectedDataFolder] = useState<string | null>(null);
 
+  // Undo / Redo history stacks & in-app confirmation/notice dialog state
+  const monthsRef = useRef<Record<string, MonthData>>(months);
+  useEffect(() => {
+    monthsRef.current = months;
+  }, [months]);
+  const [undoStack, setUndoStack] = useState<Record<string, MonthData>[]>([]);
+  const [redoStack, setRedoStack] = useState<Record<string, MonthData>[]>([]);
+  const [actionModal, setActionModal] = useState<{
+    variant: ActionMessageVariant;
+    title: string;
+    message: string;
+    detail?: string;
+    confirmLabel?: string;
+    onConfirm?: () => void;
+  } | null>(null);
+
   // Listen to Firebase Auth state (Google Sign-In across sessions; skipped when opened directly via file://)
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
@@ -372,6 +401,7 @@ export default function App() {
   }, [isOnline, hasOfflineChanges, justReconnected, clearReconnectedFlag]);
 
   const handleRestoreMonthsFromSync = useCallback((restored: Record<string, MonthData>) => {
+    monthsRef.current = restored;
     setMonths(restored);
     saveAllMonths(restored);
     const firstId = Object.keys(restored)[0];
@@ -432,6 +462,26 @@ export default function App() {
     (isSharedPublicDeployment()
       ? Object.values(createPairedBlankMonths())[0]
       : createDefaultMonth());
+
+  // Deferred bills in the active sheet eligible for carryover when creating a new cutoff sheet
+  const deferredStats = useMemo(() => {
+    if (!currentMonth) return { count: 0, total: 0 };
+    const rowOrder = currentMonth.rowOrder || INITIAL_ROW_ORDER;
+    let count = 0;
+    let total = 0;
+    for (const rowId of rowOrder) {
+      const row = currentMonth.rows[rowId];
+      if (!row || row.rowType !== 'expense') continue;
+      if (row.remarks === 'Next Payroll' || row.remarks === 'Deferred') {
+        const rowSum = (row.monthly?.value || 0) + (row.cutoff15th?.value || 0);
+        if (rowSum > 0) {
+          count += 1;
+          total += rowSum;
+        }
+      }
+    }
+    return { count, total };
+  }, [currentMonth]);
 
   // Current active calendar year filter (e.g. 2024, 2025, 2026, 2027)
   const currentSheetYear = currentMonth.year || extractMonthKey(currentMonth).year || 2026;
@@ -617,20 +667,29 @@ export default function App() {
   }, [displayedMonthsForTabs]);
 
   // Save changes to localStorage and sync to Google Account when online & logged in
-  const persistMonths = useCallback((updated: Record<string, MonthData>) => {
-    setMonths(updated);
-    saveAllMonths(updated);
-    triggerLocalSaveIndicator();
-    if (isOnline && securityProfile.isAuthenticated && securityProfile.email) {
-      try {
-        const { updatedProfile } = createGoogleCloudBackup(updated, securityProfile);
-        setSecurityProfile(updatedProfile);
-        saveSecurityProfile(updatedProfile);
-      } catch (e) {
-        console.error('Immediate Google sync error:', e);
+  const persistMonths = useCallback(
+    (updated: Record<string, MonthData>, options?: { skipHistory?: boolean }) => {
+      if (!options?.skipHistory && monthsRef.current) {
+        const snapshot = JSON.parse(JSON.stringify(monthsRef.current)) as Record<string, MonthData>;
+        setUndoStack((prev) => [...prev.slice(-29), snapshot]);
+        setRedoStack([]);
       }
-    }
-  }, [isOnline, securityProfile, triggerLocalSaveIndicator]);
+      monthsRef.current = updated;
+      setMonths(updated);
+      saveAllMonths(updated);
+      triggerLocalSaveIndicator();
+      if (isOnline && securityProfile.isAuthenticated && securityProfile.email) {
+        try {
+          const { updatedProfile } = createGoogleCloudBackup(updated, securityProfile);
+          setSecurityProfile(updatedProfile);
+          saveSecurityProfile(updatedProfile);
+        } catch (e) {
+          console.error('Immediate Google sync error:', e);
+        }
+      }
+    },
+    [isOnline, securityProfile, triggerLocalSaveIndicator]
+  );
 
   const handleSelectMonth = (monthId: string) => {
     const target = months[monthId];
@@ -645,6 +704,106 @@ export default function App() {
     setActiveCell(null);
     setActiveTab('sheet');
   };
+
+  // Undo & Redo handlers for worksheet mutations
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const previousSnapshot = undoStack[undoStack.length - 1];
+    const currentSnapshot = JSON.parse(JSON.stringify(monthsRef.current)) as Record<string, MonthData>;
+    setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev.slice(-29), currentSnapshot]);
+    persistMonths(previousSnapshot, { skipHistory: true });
+    if (!previousSnapshot[activeMonthId]) {
+      const firstId = Object.keys(previousSnapshot)[0];
+      if (firstId) {
+        setActiveMonthIdState(firstId);
+        setActiveMonthId(firstId);
+      }
+    }
+    setActiveCell(null);
+  }, [undoStack, persistMonths, activeMonthId]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const nextSnapshot = redoStack[redoStack.length - 1];
+    const currentSnapshot = JSON.parse(JSON.stringify(monthsRef.current)) as Record<string, MonthData>;
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [...prev.slice(-29), currentSnapshot]);
+    persistMonths(nextSnapshot, { skipHistory: true });
+    if (!nextSnapshot[activeMonthId]) {
+      const firstId = Object.keys(nextSnapshot)[0];
+      if (firstId) {
+        setActiveMonthIdState(firstId);
+        setActiveMonthId(firstId);
+      }
+    }
+    setActiveCell(null);
+  }, [redoStack, persistMonths, activeMonthId]);
+
+  // Global Ctrl+Z / Ctrl+Y / Cmd+Shift+Z shortcut for worksheet Undo/Redo
+  useEffect(() => {
+    if (
+      activeTab !== 'sheet' ||
+      isSalaryModalOpen ||
+      isNewMonthModalOpen ||
+      isImportExportModalOpen ||
+      isSettingsModalOpen ||
+      isSyncModalOpen ||
+      Boolean(noteTarget) ||
+      Boolean(actionModal) ||
+      Boolean(updateNoticeState) ||
+      noDataPopupYear !== null ||
+      isLoadingYear
+    ) {
+      return;
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const keyLower = e.key.toLowerCase();
+      if (keyLower === 'z' && !e.shiftKey) {
+        if (undoStack.length > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if (keyLower === 'y' || (keyLower === 'z' && e.shiftKey)) {
+        if (redoStack.length > 0) {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    activeTab,
+    isSalaryModalOpen,
+    isNewMonthModalOpen,
+    isImportExportModalOpen,
+    isSettingsModalOpen,
+    isSyncModalOpen,
+    noteTarget,
+    actionModal,
+    updateNoticeState,
+    noDataPopupYear,
+    isLoadingYear,
+    undoStack.length,
+    redoStack.length,
+    handleUndo,
+    handleRedo,
+  ]);
 
   useEffect(() => {
     if (activeTab !== 'sheet') {
@@ -1504,6 +1663,11 @@ export default function App() {
       persistMonths(updatedMonths);
 
       if (oldRemarks !== remarksValue) {
+        const formatRemarkLabel = (val: string) =>
+          val === 'OK' ? 'Settled' : val === 'Next Payroll' ? 'Deferred' : val || '—';
+        const oldLabel = formatRemarkLabel(oldRemarks);
+        const newLabel = formatRemarkLabel(remarksValue);
+
         addChangeLog({
           sheetName: targetMonth.name,
           year: targetMonth.year || selectedYear,
@@ -1511,9 +1675,9 @@ export default function App() {
           actionLabel: 'Remarks Change',
           rowLabel: targetRow.label,
           column: 'Remarks',
-          oldValue: oldRemarks,
-          newValue: remarksValue,
-          description: `Updated remarks for "${targetRow.label}" from "${oldRemarks}" to "${remarksValue}"`,
+          oldValue: oldLabel,
+          newValue: newLabel,
+          description: `Updated remarks for "${targetRow.label}" from "${oldLabel}" to "${newLabel}"`,
         });
 
         if (!isOnline) {
@@ -1523,9 +1687,9 @@ export default function App() {
             year: targetMonth.year || selectedYear,
             rowLabel: targetRow.label,
             column: 'Remarks',
-            oldValue: oldRemarks,
-            newValue: remarksValue,
-            description: `Updated remarks for "${targetRow.label}" to "${remarksValue}"`,
+            oldValue: oldLabel,
+            newValue: newLabel,
+            description: `Updated remarks for "${targetRow.label}" to "${newLabel}"`,
           });
         }
       }
@@ -1539,6 +1703,63 @@ export default function App() {
         }
         return prev;
       });
+    },
+    [months, activeMonthId, currentMonth, persistMonths, selectedYear, isOnline]
+  );
+
+  // Batch update Remarks column in a single undoable step (e.g. "Settle Unset")
+  const handleBatchUpdateRemarks = useCallback(
+    (rowIds: RowId[], remarksValue: string) => {
+      if (!rowIds || rowIds.length === 0) return;
+      const targetMonth = months[activeMonthId] || currentMonth;
+      const nextRows = { ...targetMonth.rows };
+      const updatedLabels: string[] = [];
+
+      for (const rowId of rowIds) {
+        const row = nextRows[rowId];
+        if (!row) continue;
+        nextRows[rowId] = {
+          ...row,
+          remarks: remarksValue,
+        };
+        updatedLabels.push(row.label);
+      }
+
+      if (updatedLabels.length === 0) return;
+
+      const updatedMonth: MonthData = {
+        ...targetMonth,
+        rows: nextRows,
+      };
+      const recalculated = recalculateMonthData(updatedMonth);
+
+      persistMonths({
+        ...months,
+        [activeMonthId]: recalculated,
+      });
+
+      const statusLabel =
+        remarksValue === 'OK' ? 'Settled' : remarksValue === 'Next Payroll' ? 'Deferred' : remarksValue || '—';
+      addChangeLog({
+        sheetName: targetMonth.name,
+        year: targetMonth.year || selectedYear,
+        action: 'remarks_change',
+        actionLabel: 'Batch Remarks Update',
+        column: 'Remarks',
+        newValue: statusLabel,
+        description: `Marked ${updatedLabels.length} unset bill(s) as "${statusLabel}": ${updatedLabels.join(', ')}`,
+      });
+
+      if (!isOnline) {
+        addOfflineChange({
+          action: 'remarks_change',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          column: 'Remarks',
+          newValue: statusLabel,
+          description: `Marked ${updatedLabels.length} unset bill(s) as "${statusLabel}"`,
+        });
+      }
     },
     [months, activeMonthId, currentMonth, persistMonths, selectedYear, isOnline]
   );
@@ -1800,14 +2021,15 @@ export default function App() {
     [months, activeMonthId, currentMonth, persistMonths]
   );
 
-  // Create new month: default template has empty expense cells, preserved formulas, and optional previous balance carryover
+  // Create new month: default template has empty expense cells, preserved formulas, optional previous balance & deferred bills carryover
   const handleCreateMonth = (
     monthName: string,
     shouldCopyCurrent: boolean,
     manualSalaryMonthly?: number,
     manualSalaryKinsenas?: number,
     targetYear?: number,
-    includePreviousBalance = true
+    includePreviousBalance = true,
+    carryOverDeferred = false
   ) => {
     const yr = targetYear || selectedYear || 2026;
     const newId = `month_${Date.now()}`;
@@ -1850,6 +2072,53 @@ export default function App() {
         manualSalaryKinsenas ?? (currentMonth.salaryBreakdown.cutoff15th.baseSalary || 0)
       );
       newMonth.year = yr;
+
+      // Optional carryover of Deferred ("Next Payroll") bills from current sheet
+      if (carryOverDeferred && currentMonth) {
+        const srcOrder = currentMonth.rowOrder || INITIAL_ROW_ORDER;
+        const targetOrder = [...(newMonth.rowOrder || INITIAL_ROW_ORDER)];
+
+        for (const srcRowId of srcOrder) {
+          const srcRow = currentMonth.rows[srcRowId];
+          if (!srcRow || srcRow.rowType !== 'expense') continue;
+          if (srcRow.remarks !== 'Next Payroll' && srcRow.remarks !== 'Deferred') continue;
+
+          const monthlyVal = srcRow.monthly?.value || 0;
+          const cutoffVal = srcRow.cutoff15th?.value || 0;
+          if (monthlyVal <= 0 && cutoffVal <= 0) continue;
+
+          const carryNote = `Deferred from ${currentMonth.name}`;
+          const existingTarget = newMonth.rows[srcRowId];
+
+          newMonth.rows[srcRowId] = {
+            ...(existingTarget || srcRow),
+            id: srcRowId,
+            label: srcRow.label,
+            rowType: 'expense',
+            isAutoMetrobank: srcRow.isAutoMetrobank !== false,
+            isCustomRow: srcRow.isCustomRow,
+            monthly: {
+              rawInput: monthlyVal > 0 ? String(monthlyVal) : '',
+              value: monthlyVal,
+              note: monthlyVal > 0 ? srcRow.monthly?.note || carryNote : undefined,
+            },
+            cutoff15th: {
+              rawInput: cutoffVal > 0 ? String(cutoffVal) : '',
+              value: cutoffVal,
+              note: cutoffVal > 0 ? srcRow.cutoff15th?.note || carryNote : undefined,
+            },
+            remarks: '',
+          };
+
+          if (!targetOrder.includes(srcRowId)) {
+            let insertAt = targetOrder.indexOf('qr_ph');
+            if (insertAt === -1) insertAt = targetOrder.indexOf('total');
+            if (insertAt === -1) insertAt = targetOrder.length;
+            targetOrder.splice(insertAt, 0, srcRowId);
+          }
+        }
+        newMonth.rowOrder = targetOrder;
+      }
     }
 
     const recalculated = recalculateMonthData(newMonth);
@@ -1870,7 +2139,9 @@ export default function App() {
       year: yr,
       action: 'sheet_create',
       actionLabel: 'Sheet Created',
-      description: `Created new monthly sheet "${monthName}" for Year ${yr}`,
+      description: `Created new monthly sheet "${monthName}" for Year ${yr}${
+        !shouldCopyCurrent && carryOverDeferred ? ' with carried-over deferred bills' : ''
+      }`,
     });
 
     if (!isOnline) {
@@ -1949,7 +2220,12 @@ export default function App() {
   const handleDeleteMonth = useCallback((monthId: string) => {
     const monthKeys = Object.keys(months);
     if (monthKeys.length <= 1) {
-      alert('Cannot delete the only sheet in the workbook.');
+      setActionModal({
+        variant: 'blocked',
+        title: 'Cannot Delete Sheet',
+        message: 'Cannot delete the only sheet in the workbook.',
+        detail: 'Add or duplicate another sheet first before removing this sheet.',
+      });
       return;
     }
     const monthToDelete = months[monthId];
@@ -2026,14 +2302,21 @@ export default function App() {
     const confirmText = isSharedPublicDeployment()
       ? 'Reset all budget data to a blank starter template?'
       : 'Reset all budget data to default template from your spreadsheet?';
-    if (window.confirm(confirmText)) {
-      const pairedMonths = isSharedPublicDeployment()
-        ? createPairedBlankMonths()
-        : createPairedDefaultMonths();
-      persistMonths(pairedMonths);
-      const firstId = Object.keys(pairedMonths)[0];
-      if (firstId) handleSelectMonth(firstId);
-    }
+    setActionModal({
+      variant: 'blocked',
+      title: 'Reset Budget Workbook?',
+      message: confirmText,
+      detail: 'You can undo immediately with Ctrl+Z or restore from a JSON/cloud backup.',
+      confirmLabel: 'Reset Workbook',
+      onConfirm: () => {
+        const pairedMonths = isSharedPublicDeployment()
+          ? createPairedBlankMonths()
+          : createPairedDefaultMonths();
+        persistMonths(pairedMonths);
+        const firstId = Object.keys(pairedMonths)[0];
+        if (firstId) handleSelectMonth(firstId);
+      },
+    });
   };
 
   /**
@@ -2133,9 +2416,9 @@ export default function App() {
 
       {/* 2. Modern Sheet Selector & Quick KPI Bar */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-2.5 sm:px-5 py-1.5 shrink-0 no-print transition-colors">
-        <div className="w-full mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="w-full mx-auto flex flex-col xl:flex-row items-center justify-center gap-2 xl:gap-5">
           {/* Year Switcher & Quick Actions */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
             {/* Modern Year Selection Button & Dropdown Menu */}
             <div className="relative" ref={yearDropdownRef}>
               <button
@@ -2145,16 +2428,15 @@ export default function App() {
                   setYearActionError(null);
                   setConfirmDeleteYear(null);
                 }}
-                className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-700 rounded-lg px-2.5 py-1 shadow-2xs transition-all cursor-pointer group hover:border-slate-400 dark:hover:border-slate-600"
+                className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs sm:text-[13px] lg:text-sm leading-5 whitespace-nowrap shadow-2xs transition-all cursor-pointer group hover:border-slate-400 dark:hover:border-slate-600"
                 title="Click to select, add, or delete calendar year"
               >
-                <Calendar className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="text-[10px] lg:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Year:</span>
-                <span className="text-xs lg:text-sm font-black text-slate-900 dark:text-slate-100 font-mono tracking-tight">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="font-black text-slate-900 dark:text-slate-100 font-mono tracking-tight">
                   {selectedYear}
                 </span>
                 <ChevronDown
-                  className={`w-3 h-3 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${
+                  className={`w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${
                     isYearDropdownOpen ? 'rotate-180 text-emerald-600 dark:text-emerald-400' : 'group-hover:text-slate-700 dark:group-hover:text-slate-300'
                   }`}
                 />
@@ -2163,7 +2445,7 @@ export default function App() {
               {/* Year Selection Dropdown Menu */}
               {isYearDropdownOpen && (
                 <div className="absolute left-0 top-full mt-1.5 w-64 lg:w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3 py-1.5 text-[10px] lg:text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div className="px-3 py-1.5 text-[11px] lg:text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <span>Calendar Years</span>
                     <span className="font-mono text-slate-400 dark:text-slate-500">{availableYears.length}</span>
                   </div>
@@ -2418,9 +2700,9 @@ export default function App() {
 
             <button
               onClick={() => setIsNewMonthModalOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg border border-slate-300/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs sm:text-[13px] lg:text-sm leading-5 whitespace-nowrap font-semibold text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg border border-slate-300/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
             >
-              <Plus className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+              <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Add Sheet</span>
             </button>
 
@@ -2430,10 +2712,10 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsImportExportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs lg:text-sm text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-800 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-[13px] lg:text-sm leading-5 whitespace-nowrap text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-700 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer shadow-2xs"
               title="Import, export, or print / save as PDF"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Import / Export / Print</span>
             </button>
 
@@ -2447,7 +2729,7 @@ export default function App() {
                 aria-expanded={isCurrencyMenuOpen}
                 aria-haspopup="listbox"
                 title={`Display currency: ${currency.name} (${currency.code})`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-700 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs sm:text-[13px] lg:text-sm leading-5 whitespace-nowrap font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-700 rounded-lg transition-colors cursor-pointer shadow-2xs"
               >
                 <Globe className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
@@ -2463,7 +2745,7 @@ export default function App() {
               {isCurrencyMenuOpen && (
                 <div className="absolute left-0 mt-1.5 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-2 z-50">
                   <div className="px-3 pb-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                       Display Currency
                     </div>
                     <div className="mt-1.5 grid grid-cols-4 gap-1">
@@ -2479,7 +2761,7 @@ export default function App() {
                               setCurrency(quickCode);
                               setIsCurrencyMenuOpen(false);
                             }}
-                            className={`px-1.5 py-1 rounded-md text-[11px] font-mono font-bold border transition-colors cursor-pointer ${
+                            className={`px-1.5 py-1 rounded-md text-xs font-mono font-bold border transition-colors cursor-pointer ${
                               active
                                 ? 'bg-emerald-600 text-white border-emerald-600'
                                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -2505,14 +2787,14 @@ export default function App() {
                             setCurrency(item.code);
                             setIsCurrencyMenuOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs sm:text-[13px] transition-colors cursor-pointer ${
                             active
                               ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold'
                               : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="inline-flex items-center justify-center w-8 px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200 shrink-0">
+                            <span className="inline-flex items-center justify-center w-8 px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs font-bold text-slate-800 dark:text-slate-200 shrink-0">
                               {item.symbol.trim()}
                             </span>
                             <div className="text-left truncate">
@@ -2535,10 +2817,10 @@ export default function App() {
           </div>
 
           {/* Quick Real-Time Metrics Strip (Tabular figures) */}
-          <div className="flex items-center gap-3 lg:gap-4 text-xs lg:text-sm xl:text-[15px] font-mono overflow-x-auto pb-0.5 sm:pb-0">
+          <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 sm:gap-x-3 lg:gap-x-4 text-xs sm:text-[13px] lg:text-sm xl:text-[15px] font-mono">
             <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 shrink-0">
-              <CreditCard className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-[11px] lg:text-xs xl:text-sm">METROBANK:</span>
+              <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span className="font-sans font-semibold text-xs lg:text-[13px] xl:text-sm">METROBANK:</span>
               <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                 {hasDataForSelectedYear ? formatPHP(metroKinsenas) : formatCurrency(0)}
               </span>
@@ -2547,9 +2829,9 @@ export default function App() {
             <span className="text-slate-300 dark:text-slate-700">|</span>
 
             <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 shrink-0">
-              <TrendingUp className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-rose-600 dark:text-rose-400" />
-              <span className="text-[11px] lg:text-xs xl:text-sm">Salary:</span>
-              <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+              <TrendingUp className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              <span className="font-sans font-semibold text-xs lg:text-[13px] xl:text-sm">Salary:</span>
+              <span className="font-bold text-violet-700 dark:text-violet-400 tabular-nums">
                 {hasDataForSelectedYear ? formatPHP(salaryKinsenas) : formatCurrency(0)}
               </span>
             </div>
@@ -2557,7 +2839,7 @@ export default function App() {
             <span className="text-slate-300 dark:text-slate-700">|</span>
 
             <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 shrink-0">
-              <span className="text-[11px] lg:text-xs xl:text-sm">Balance:</span>
+              <span className="font-sans font-semibold text-xs lg:text-[13px] xl:text-sm">Balance:</span>
               <span
                 className={`font-bold tabular-nums ${
                   hasDataForSelectedYear && balanceKinsenas >= 0
@@ -2579,7 +2861,7 @@ export default function App() {
         {activeTab === 'sheet' && (
           <div className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden space-y-1.5">
             {hasDataForSelectedYear && currentMonth ? (
-              <div className="flex-1 min-h-0 rounded-xl sm:rounded-2xl border border-slate-300/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/80 p-1 sm:p-1.5 flex flex-col overflow-hidden shadow-2xs">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <BudgetTable
                   monthData={currentMonth}
                   activeCell={activeCell}
@@ -2634,6 +2916,11 @@ export default function App() {
                   onMergeRowCells={handleMergeRowCells}
                   onUnmergeRowCells={handleUnmergeRowCells}
                   onReorderRows={handleReorderRows}
+                  canUndo={undoStack.length > 0}
+                  canRedo={redoStack.length > 0}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  onBatchUpdateRemarks={handleBatchUpdateRemarks}
                 />
               </div>
             ) : (
@@ -2822,10 +3109,13 @@ export default function App() {
         )}
       </main>
 
-      {/* 5. Minimalist Clean Footer (Permanently visible at bottom) */}
-      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 shrink-0 select-none transition-colors">
-        <div className="w-full mx-auto flex items-center justify-center text-[11px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400 font-medium text-center">
-          Developed by John Archie Padrigo with Google AI Studio © 2026
+      {/* 5. Locked Minimalist Clean Footer (Non-editable, permanently visible at bottom) */}
+      <footer
+        aria-label="Application attribution"
+        className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 shrink-0 select-none pointer-events-none transition-colors"
+      >
+        <div className="w-full mx-auto flex items-center justify-center text-xs sm:text-[13px] lg:text-sm text-slate-500 dark:text-slate-400 font-medium text-center">
+          {LOCKED_AUTHOR_FOOTER.text}
         </div>
       </footer>
 
@@ -2856,6 +3146,8 @@ export default function App() {
         defaultBaseSalaryKinsenas={currentMonth.salaryBreakdown.cutoff15th.baseSalary}
         initialYear={selectedYear}
         availableYears={availableYears}
+        deferredCount={deferredStats.count}
+        deferredTotal={deferredStats.total}
         onConfirm={handleCreateMonth}
       />
 
@@ -3039,6 +3331,18 @@ export default function App() {
         previousReleases={(updateNoticeState?.history || RELEASE_NOTES).slice(1)}
         requiresReload={Boolean(updateNoticeState?.requiresReload)}
         onConfirmOk={handleConfirmUpdateOk}
+      />
+
+      {/* Styled In-App Confirmation / Warning / Status Dialog */}
+      <ActionMessageModal
+        isOpen={Boolean(actionModal)}
+        variant={actionModal?.variant || 'info'}
+        title={actionModal?.title || ''}
+        message={actionModal?.message || ''}
+        detail={actionModal?.detail}
+        confirmLabel={actionModal?.confirmLabel}
+        onConfirm={actionModal?.onConfirm}
+        onClose={() => setActionModal(null)}
       />
     </div>
   );

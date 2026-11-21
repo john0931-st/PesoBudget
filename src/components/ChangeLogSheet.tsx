@@ -24,6 +24,7 @@ import {
   clearChangeLogsForYear,
   exportChangeLogsToCSV,
 } from '../utils/changeLogService';
+import { ActionMessageModal } from './ActionMessageModal';
 
 interface ChangeLogSheetProps {
   currentYear?: number;
@@ -40,6 +41,7 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
   const [logs, setLogs] = useState<ChangeLogEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('all');
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
 
   useEffect(() => {
     setLogs(getChangeLogs());
@@ -87,13 +89,7 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
   }, [yearLogs, selectedActionFilter, searchQuery]);
 
   const handleClear = () => {
-    if (
-      window.confirm(
-        `Are you sure you want to clear all change log history for Year ${targetYear}? This action cannot be undone.`
-      )
-    ) {
-      clearChangeLogsForYear(targetYear);
-    }
+    setIsClearConfirmOpen(true);
   };
 
 
@@ -317,14 +313,14 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
 
       {/* Spreadsheet Table View */}
       <div className="flex-1 min-h-[240px] overflow-auto bg-slate-100 dark:bg-slate-950 p-2 sm:p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/95 dark:border-slate-700/80 ring-1 ring-slate-900/[0.04] dark:ring-white/[0.05] shadow-[0_6px_28px_-6px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] overflow-hidden">
           {filteredLogs.length === 0 ? (
             <div className="p-12 text-center flex flex-col items-center justify-center">
               <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-400 dark:text-slate-500">
                 <FileSpreadsheet className="w-7 h-7" />
               </div>
               <h3 className="text-sm lg:text-base font-semibold text-slate-800 dark:text-slate-100">No Change Log Records Found for Year {targetYear}</h3>
-              <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400 max-w-sm lg:max-w-md mt-1">
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm lg:max-w-md mt-1">
                 {searchQuery || selectedActionFilter !== 'all'
                   ? 'No entries matched your current search filters. Try clearing filters.'
                   : `Changes you make in Year ${targetYear} monthly sheets (editing values, formulas, remarks, or adding items) will automatically appear here with a full audit trail.`}
@@ -332,54 +328,54 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs lg:text-sm">
+              <table className="w-full text-left border-collapse pb-table-cell">
                 <thead>
-                  <tr className="bg-slate-50/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold uppercase tracking-wider text-[11px] lg:text-xs">
-                    <th className="py-2.5 px-4 w-44">Date & Time</th>
-                    <th className="py-2.5 px-3 w-36">Sheet / Year</th>
-                    <th className="py-2.5 px-3 w-36">Action</th>
-                    <th className="py-2.5 px-3 w-40">Target Row / Item</th>
-                    <th className="py-2.5 px-3 w-28">Column</th>
-                    <th className="py-2.5 px-3 w-56">Value Before / After</th>
-                    <th className="py-2.5 px-4 min-w-[220px]">Audit Details</th>
+                  <tr className="bg-slate-50/95 dark:bg-slate-800/90 border-b border-slate-300/90 dark:border-slate-700 divide-x divide-slate-200/75 dark:divide-slate-700/75 text-slate-600 dark:text-slate-300 font-bold uppercase pb-table-header">
+                    <th className="py-2.5 sm:py-3 px-3 sm:px-4 w-44">Date & Time</th>
+                    <th className="py-2.5 sm:py-3 px-3 w-36">Sheet / Year</th>
+                    <th className="py-2.5 sm:py-3 px-3 w-36">Action</th>
+                    <th className="py-2.5 sm:py-3 px-3 w-40">Target Row / Item</th>
+                    <th className="py-2.5 sm:py-3 px-3 w-28">Column</th>
+                    <th className="py-2.5 sm:py-3 px-3 w-56">Value Before / After</th>
+                    <th className="py-2.5 sm:py-3 px-3 sm:px-4 min-w-[220px]">Audit Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/85">
                   {filteredLogs.map((entry, index) => (
                     <tr
                       key={entry.id || index}
-                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors text-slate-700 dark:text-slate-300"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 divide-x divide-slate-100/90 dark:divide-slate-800/75 transition-colors text-slate-700 dark:text-slate-300"
                     >
                       {/* Date & Time */}
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono text-[11px] lg:text-xs">
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono text-xs sm:text-[13px]">
                         {entry.formattedDate}
                       </td>
 
                       {/* Sheet Name */}
-                      <td className="py-3 px-3 font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                      <td className="py-2.5 sm:py-3 px-3 font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           {entry.sheetName}
                           {entry.year && (
-                            <span className="text-[10px] lg:text-xs text-slate-400 dark:text-slate-500 font-mono">({entry.year})</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">({entry.year})</span>
                           )}
                         </span>
                       </td>
 
                       {/* Action */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-2.5 sm:py-3 px-3 whitespace-nowrap">
                         {getActionBadge(entry.action, entry.actionLabel)}
                       </td>
 
                       {/* Target Row / Item */}
-                      <td className="py-3 px-3 font-medium text-slate-800 dark:text-slate-200">
+                      <td className="py-2.5 sm:py-3 px-3 font-medium text-slate-800 dark:text-slate-200">
                         {entry.rowLabel || <span className="text-slate-400 dark:text-slate-500 italic">None</span>}
                       </td>
 
                       {/* Column */}
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      <td className="py-2.5 sm:py-3 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {entry.column ? (
-                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium text-[11px] lg:text-xs">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium text-xs sm:text-[13px]">
                             {entry.column}
                           </span>
                         ) : (
@@ -388,14 +384,14 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
                       </td>
 
                       {/* Value Before / After */}
-                      <td className="py-3 px-3">
+                      <td className="py-2.5 sm:py-3 px-3">
                         {entry.oldValue !== undefined || entry.newValue !== undefined ? (
-                          <div className="flex items-center gap-1.5 font-mono text-[11px] lg:text-xs">
-                            <span className="px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded border border-rose-100 dark:border-rose-800/70 line-through truncate max-w-[90px] lg:max-w-[120px]" title={entry.oldValue || '(empty)'}>
+                          <div className="flex items-center gap-1.5 font-mono text-xs sm:text-[13px]">
+                            <span className="px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded border border-rose-200/80 dark:border-rose-800/70 line-through truncate max-w-[100px] lg:max-w-[130px]" title={entry.oldValue || '(empty)'}>
                               {entry.oldValue || '—'}
                             </span>
                             <ArrowRight className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
-                            <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-100 dark:border-emerald-800/70 font-semibold truncate max-w-[90px] lg:max-w-[120px]" title={entry.newValue || '(empty)'}>
+                            <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-200/80 dark:border-emerald-800/70 font-semibold truncate max-w-[100px] lg:max-w-[130px]" title={entry.newValue || '(empty)'}>
                               {entry.newValue || '—'}
                             </span>
                           </div>
@@ -405,7 +401,7 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
                       </td>
 
                       {/* Details / Description */}
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300 leading-relaxed">
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-600 dark:text-slate-300 leading-relaxed">
                         {entry.description}
                       </td>
                     </tr>
@@ -416,6 +412,20 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
           )}
         </div>
       </div>
+
+      <ActionMessageModal
+        isOpen={isClearConfirmOpen}
+        variant="error"
+        title={`Clear Year ${targetYear} Audit Log?`}
+        message={`Are you sure you want to permanently remove all ${yearLogs.length} change log entries for Year ${targetYear}?`}
+        detail="Your spreadsheet sheets remain untouched, only the Year audit history is cleared."
+        confirmLabel="Clear Log"
+        onConfirm={() => {
+          clearChangeLogsForYear(targetYear);
+          setIsClearConfirmOpen(false);
+        }}
+        onClose={() => setIsClearConfirmOpen(false)}
+      />
     </div>
   );
 };

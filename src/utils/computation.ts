@@ -50,10 +50,10 @@ export function recalculateMonthData(month: MonthData): MonthData {
 
       metroMonthly += mVal > 0 ? mVal : (kVal > 0 ? kVal : 0);
 
-      // Kinsenas sum: use Kinsenas if entered, or if 0 check Monthly when settled (OK)
+      // Kinsenas sum: use Kinsenas if entered, or if 0 check Monthly when settled (not deferred)
       if (kVal > 0) {
         metroKinsenas += kVal;
-      } else if (mVal > 0 && row.remarks !== 'Next Payroll') {
+      } else if (mVal > 0 && row.remarks !== 'Next Payroll' && row.remarks !== 'Deferred') {
         metroKinsenas += mVal;
       }
     }

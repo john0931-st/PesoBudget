@@ -255,7 +255,11 @@ export function parseCSVData(
       const normRemarks = rawRemarks.toLowerCase();
       if (normRemarks === 'ok' || normRemarks === 'paid' || normRemarks === 'settled') {
         finalRemarks = 'OK';
-      } else if (normRemarks.includes('next') || normRemarks.includes('payroll')) {
+      } else if (
+        normRemarks.includes('next') ||
+        normRemarks.includes('payroll') ||
+        normRemarks === 'deferred'
+      ) {
         finalRemarks = 'Next Payroll';
       } else {
         finalRemarks = rawRemarks;

@@ -219,10 +219,10 @@ export function computeCombinedMonthData(
         sheetExp += val;
 
         // Check remarks
-        if (row.remarks === 'OK') {
+        if (row.remarks === 'OK' || row.remarks === 'Settled') {
           settledAmount += val;
           settledCount++;
-        } else if (row.remarks === 'Next Payroll') {
+        } else if (row.remarks === 'Next Payroll' || row.remarks === 'Deferred') {
           nextPayrollAmount += val;
           nextPayrollCount++;
         }
@@ -239,10 +239,10 @@ export function computeCombinedMonthData(
         if (customRow && customRow.rowType === 'expense') {
           const val = (customRow.cutoff15th?.value || 0) + (customRow.monthly?.value && !customRow.cutoff15th?.value ? customRow.monthly.value : 0);
           sheetExp += val;
-          if (customRow.remarks === 'OK') {
+          if (customRow.remarks === 'OK' || customRow.remarks === 'Settled') {
             settledAmount += val;
             settledCount++;
-          } else if (customRow.remarks === 'Next Payroll') {
+          } else if (customRow.remarks === 'Next Payroll' || customRow.remarks === 'Deferred') {
             nextPayrollAmount += val;
             nextPayrollCount++;
           }

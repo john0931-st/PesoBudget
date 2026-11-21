@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes" />
@@ -9,18 +9,20 @@
     <meta property="og:description" content="PesoBudget: Smart Philippine Expense & Payroll Tracker with automated Metrobank/QR PH computations, Excel notes, biometrics and backup." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#020617" />
     <script>
       (function () {
         try {
           var t = localStorage.getItem('pesobudget_theme_v1');
-          if (t === 'dark') {
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (t === 'light') {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.colorScheme = 'light';
+            if (m) m.setAttribute('content', '#0f172a');
+          } else {
             document.documentElement.classList.add('dark');
             document.documentElement.style.colorScheme = 'dark';
-            var m = document.querySelector('meta[name="theme-color"]');
             if (m) m.setAttribute('content', '#020617');
-          } else {
-            document.documentElement.style.colorScheme = 'light';
           }
         } catch (e) {}
       })();

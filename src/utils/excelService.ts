@@ -11,9 +11,9 @@ function getExcelCurrencyFormat(): string {
   const currency = getActiveCurrencyConfig();
   const sym = currency.symbol.replace(/"/g, '');
   if (currency.decimals === 0) {
-    return `"${sym}"#,##0;[Red]-"${sym}"#,##0`;
+    return `"${sym}"#,##0;[Red]"${sym}"-#,##0`;
   }
-  return `"${sym}"#,##0.00;[Red]-"${sym}"#,##0.00`;
+  return `"${sym}"#,##0.00;[Red]"${sym}"-#,##0.00`;
 }
 
 // Normalizes row labels from imported Excel sheets
@@ -204,8 +204,8 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
   // Section 2: Payroll Settlement & Cutoff Breakdown
   wsData.push(['PAGE 2: PAYROLL SETTLEMENT & CUTOFF ANALYSIS', '', '', '', '']);
   wsData.push(['Settlement Status', `Amount (${currencyCode})`, 'Count of Bills', '% of Total Bills', '']);
-  wsData.push(['Settled Bills (OK)', combined.settledAmount, combined.settledCount, `${combined.settlementPercent.toFixed(1)}%`]);
-  wsData.push(['Scheduled Next Payroll', combined.nextPayrollAmount, combined.nextPayrollCount, `${(100 - combined.settlementPercent).toFixed(1)}%`]);
+  wsData.push(['Settled Bills', combined.settledAmount, combined.settledCount, `${combined.settlementPercent.toFixed(1)}%`]);
+  wsData.push(['Deferred Bills', combined.nextPayrollAmount, combined.nextPayrollCount, `${(100 - combined.settlementPercent).toFixed(1)}%`]);
   wsData.push([]);
   wsData.push(['Cutoff Sheet', 'Expenses', 'Salary', 'MP2 Savings', 'Personal Savings', 'Ending Balance']);
   combined.cutoffSummaries.forEach((cs) => {
@@ -437,8 +437,8 @@ export async function importFromExcelFile(
         // Process remarks
         if (remarksRaw) {
           const norm = remarksRaw.toLowerCase();
-          if (norm === 'ok' || norm === 'paid') targetRow.remarks = 'OK';
-          else if (norm.includes('next') || norm.includes('payroll')) targetRow.remarks = 'Next Payroll';
+          if (norm === 'ok' || norm === 'paid' || norm === 'settled') targetRow.remarks = 'OK';
+          else if (norm.includes('next') || norm.includes('payroll') || norm === 'deferred') targetRow.remarks = 'Next Payroll';
           else targetRow.remarks = remarksRaw;
         }
         if (noteD) {

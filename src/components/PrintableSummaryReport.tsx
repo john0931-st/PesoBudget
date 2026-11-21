@@ -41,24 +41,21 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
     governmentSavings,
     gotymeVal,
     balanceVal,
-    personalSavings,
-    totalCombinedSavings,
     salaryVal,
     settledAmount,
     nextPayrollAmount,
     settledCount,
     nextPayrollCount,
     settlementPercent,
-    savingsRate,
     govSavingsRate,
     expenseCategories,
     cutoffSummaries,
     sheets,
-    displayName,
     tableTitle,
     sheetCount,
   } = combinedMonth;
 
+  const gotymeRate = salaryVal > 0 ? Math.round((gotymeVal / salaryVal) * 100) : 0;
   const plannedTotal = plannedMetrobank + plannedQrPh;
 
   // Group historical progression
@@ -71,8 +68,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
     expenses: cm.totalExpenses,
     salary: cm.salaryVal,
     govSavings: cm.governmentSavings,
-    personalSavings: cm.personalSavings,
-    totalSavings: cm.totalCombinedSavings,
+    gotymeSavings: cm.gotymeVal,
     balance: cm.balanceVal,
   }));
 
@@ -87,13 +83,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
           expenses: s.rows['total']?.cutoff15th?.value || s.rows['total']?.monthly?.value || 0,
           salary: s.rows['salary']?.cutoff15th?.value || s.rows['salary']?.monthly?.value || 0,
           govSavings: s.rows['mp2']?.cutoff15th?.value || s.rows['mp2']?.monthly?.value || 0,
-          personalSavings:
-            (s.rows['gotyme']?.cutoff15th?.value || s.rows['gotyme']?.monthly?.value || 0) +
-            (s.rows['balance']?.cutoff15th?.value || s.rows['balance']?.monthly?.value || 0),
-          totalSavings:
-            (s.rows['mp2']?.cutoff15th?.value || s.rows['mp2']?.monthly?.value || 0) +
-            (s.rows['gotyme']?.cutoff15th?.value || s.rows['gotyme']?.monthly?.value || 0) +
-            (s.rows['balance']?.cutoff15th?.value || s.rows['balance']?.monthly?.value || 0),
+          gotymeSavings: s.rows['gotyme']?.cutoff15th?.value || s.rows['gotyme']?.monthly?.value || 0,
           balance: s.rows['balance']?.cutoff15th?.value || s.rows['balance']?.monthly?.value || 0,
         }));
 
@@ -171,22 +161,22 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             <span className="text-[10px] text-purple-700 block mt-0.5">Digital transfer for Lazada</span>
           </div>
 
-          {/* Pag-IBIG MP2 */}
-          <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3">
-            <span className="text-[10px] font-semibold text-emerald-800 uppercase block">4. Gov (Pag-IBIG MP2)</span>
-            <div className="font-mono text-lg font-black text-emerald-950 mt-1 tabular-nums">
+          {/* Pag-IBIG MP2 (Locked) */}
+          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3">
+            <span className="text-[10px] font-semibold text-amber-800 uppercase block">4. MP2 (Locked)</span>
+            <div className="font-mono text-lg font-black text-amber-950 mt-1 tabular-nums">
               {formatPHP(Math.abs(governmentSavings))}
             </div>
-            <span className="text-[10px] text-emerald-700 block mt-0.5">{govSavingsRate}% of total salary</span>
+            <span className="text-[10px] text-amber-700 block mt-0.5">{govSavingsRate}% of salary (Non-withdrawable)</span>
           </div>
 
-          {/* Personal Savings */}
-          <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3">
-            <span className="text-[10px] font-semibold text-indigo-800 uppercase block">5. Personal Savings</span>
-            <div className="font-mono text-lg font-black text-indigo-950 mt-1 tabular-nums">
-              {formatPHP(personalSavings)}
+          {/* GoTyme (Withdrawable) */}
+          <div className="bg-teal-50/80 border border-teal-200 rounded-xl p-3">
+            <span className="text-[10px] font-semibold text-teal-800 uppercase block">5. GoTyme (Withdrawable)</span>
+            <div className="font-mono text-lg font-black text-teal-950 mt-1 tabular-nums">
+              {formatPHP(gotymeVal)}
             </div>
-            <span className="text-[10px] text-indigo-700 block mt-0.5">GoTyme ({formatPHP(gotymeVal)}) + Bal ({formatPHP(balanceVal)})</span>
+            <span className="text-[10px] text-teal-700 block mt-0.5">{gotymeRate}% of salary · Balance: {formatPHP(balanceVal)}</span>
           </div>
         </div>
 
@@ -197,15 +187,15 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             <span className="font-bold text-emerald-700 text-sm">{formatPHP(salaryVal)}</span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px]">Total Savings Rate:</span>
-            <span className="font-bold text-slate-900 text-sm">{savingsRate}% of salary</span>
+            <span className="text-slate-500 block text-[10px]">MP2 / GoTyme Rate:</span>
+            <span className="font-bold text-slate-900 text-sm">{govSavingsRate}% / {gotymeRate}%</span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px]">Settled Bills (OK):</span>
+            <span className="text-slate-500 block text-[10px]">Settled Bills:</span>
             <span className="font-bold text-emerald-700 text-sm">{settlementPercent}% ({settledCount} items)</span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px]">Deferred to Next Payroll:</span>
+            <span className="text-slate-500 block text-[10px]">Deferred Bills:</span>
             <span className="font-bold text-amber-700 text-sm">{formatPHP(nextPayrollAmount)} ({nextPayrollCount} items)</span>
           </div>
         </div>
@@ -237,8 +227,8 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
                 <th className="py-2.5 px-3">Sheet Name</th>
                 <th className="py-2.5 px-3 text-right">Total Expenses</th>
                 <th className="py-2.5 px-3 text-right">Gross Salary</th>
-                <th className="py-2.5 px-3 text-right">Pag-IBIG MP2</th>
-                <th className="py-2.5 px-3 text-right">Personal Savings</th>
+                <th className="py-2.5 px-3 text-right">MP2 (Locked)</th>
+                <th className="py-2.5 px-3 text-right">GoTyme (Withdrawable)</th>
                 <th className="py-2.5 px-3 text-right">Ending Balance</th>
               </tr>
             </thead>
@@ -251,8 +241,10 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
                   <td className="py-2.5 px-3 font-sans text-slate-600">{cutoff.name}</td>
                   <td className="py-2.5 px-3 text-right text-rose-700 font-bold">{formatPHP(cutoff.expenses)}</td>
                   <td className="py-2.5 px-3 text-right text-emerald-700 font-bold">{formatPHP(cutoff.salary)}</td>
-                  <td className="py-2.5 px-3 text-right text-teal-700 font-bold">{formatPHP(cutoff.govSavings)}</td>
-                  <td className="py-2.5 px-3 text-right text-indigo-700 font-bold">{formatPHP(cutoff.personalSavings)}</td>
+                  <td className="py-2.5 px-3 text-right text-amber-700 font-bold">{formatPHP(cutoff.govSavings)}</td>
+                  <td className="py-2.5 px-3 text-right text-teal-700 font-bold">
+                    {formatPHP(Math.max(0, cutoff.personalSavings - cutoff.endingBalance))}
+                  </td>
                   <td className="py-2.5 px-3 text-right font-bold">{formatPHP(cutoff.endingBalance)}</td>
                 </tr>
               ))}
@@ -261,8 +253,8 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
                 <td className="py-2.5 px-3 font-sans text-emerald-800">{sheetCount} Sheets Combined</td>
                 <td className="py-2.5 px-3 text-right text-rose-800 font-black">{formatPHP(Math.abs(totalExpenses))}</td>
                 <td className="py-2.5 px-3 text-right text-emerald-800 font-black">{formatPHP(salaryVal)}</td>
-                <td className="py-2.5 px-3 text-right text-teal-800 font-black">{formatPHP(Math.abs(governmentSavings))}</td>
-                <td className="py-2.5 px-3 text-right text-indigo-800 font-black">{formatPHP(personalSavings)}</td>
+                <td className="py-2.5 px-3 text-right text-amber-800 font-black">{formatPHP(Math.abs(governmentSavings))}</td>
+                <td className="py-2.5 px-3 text-right text-teal-800 font-black">{formatPHP(gotymeVal)}</td>
                 <td className="py-2.5 px-3 text-right font-black">{formatPHP(balanceVal)}</td>
               </tr>
             </tbody>
@@ -360,12 +352,12 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             </div>
             <div className="grid grid-cols-2 gap-2 font-mono text-xs">
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
-                <span className="text-[10px] text-emerald-800 block font-sans">OK (Settled):</span>
+                <span className="text-[10px] text-emerald-800 block font-sans">Settled:</span>
                 <span className="font-bold text-emerald-900 text-sm block mt-0.5">{formatPHP(settledAmount)}</span>
                 <span className="text-[10px] text-emerald-700">{settledCount} items</span>
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                <span className="text-[10px] text-amber-800 block font-sans">Next Payroll:</span>
+                <span className="text-[10px] text-amber-800 block font-sans">Deferred:</span>
                 <span className="font-bold text-amber-900 text-sm block mt-0.5">{formatPHP(nextPayrollAmount)}</span>
                 <span className="text-[10px] text-amber-700">{nextPayrollCount} items</span>
               </div>
@@ -375,7 +367,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
       </div>
 
       {/* =========================================================================
-          SECTION 5 (PAGE 5): EXECUTIVE SAVINGS & STASH BREAKDOWN
+          SECTION 5 (PAGE 5): SAVINGS RESERVES (MP2 LOCKED VS GOTYME WITHDRAWABLE)
          ========================================================================= */}
       <div className="space-y-3 break-inside-avoid">
         <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
@@ -384,45 +376,45 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
               Section 5 (Page 5)
             </span>
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-              {tableTitle} - Savings Portfolio: Government vs Personal
+              {tableTitle} - Savings Reserves: MP2 (Locked) vs GoTyme (Withdrawable)
             </h2>
           </div>
           <span className="font-mono text-xs font-bold text-emerald-950 bg-emerald-100 px-2.5 py-0.5 rounded">
-            Total Combined Stash: {formatPHP(totalCombinedSavings)}
+            Ending Balance: {formatPHP(balanceVal)}
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Government Savings */}
-          <div className="bg-emerald-50/80 border border-emerald-300 rounded-xl p-4 space-y-2">
+          {/* Pag-IBIG MP2 (Locked) */}
+          <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-950 uppercase">Government Savings</span>
-              <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
-                Pag-IBIG MP2
+              <span className="text-xs font-bold text-amber-950 uppercase">Pag-IBIG MP2</span>
+              <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+                Non-Withdrawable · Locked
               </span>
             </div>
-            <div className="font-mono text-xl font-black text-emerald-950">
+            <div className="font-mono text-xl font-black text-amber-950">
               {formatPHP(Math.abs(governmentSavings))}
             </div>
-            <p className="text-[11px] text-emerald-800 bg-white/70 p-2.5 rounded-lg border border-emerald-200/60 leading-relaxed">
-              100% Tax-free government guaranteed dividend fund (averages 6.5% – 7.5% annual yield with 5-year lock-in maturity).
+            <p className="text-[11px] text-amber-900 bg-white/70 p-2.5 rounded-lg border border-amber-200/60 leading-relaxed">
+              100% Tax-free government guaranteed dividend fund with 5-year lock-in maturity ({govSavingsRate}% of salary).
             </p>
           </div>
 
-          {/* Personal Savings */}
-          <div className="bg-indigo-50/80 border border-indigo-300 rounded-xl p-4 space-y-2">
+          {/* GoTyme (Withdrawable) */}
+          <div className="bg-teal-50/80 border border-teal-300 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-indigo-950 uppercase">Personal Savings</span>
-              <span className="text-[10px] bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 rounded-full">
-                GoTyme + Ending Balance
+              <span className="text-xs font-bold text-teal-950 uppercase">GoTyme Bank</span>
+              <span className="text-[10px] bg-teal-200 text-teal-900 font-bold px-2 py-0.5 rounded-full">
+                Withdrawable Anytime
               </span>
             </div>
-            <div className="font-mono text-xl font-black text-indigo-950">
-              {formatPHP(personalSavings)}
+            <div className="font-mono text-xl font-black text-teal-950">
+              {formatPHP(gotymeVal)}
             </div>
-            <div className="text-[11px] text-indigo-800 bg-white/70 p-2.5 rounded-lg border border-indigo-200/60 font-mono space-y-1">
+            <div className="text-[11px] text-teal-900 bg-white/70 p-2.5 rounded-lg border border-teal-200/60 font-mono space-y-1">
               <div className="flex justify-between">
-                <span>• GoTyme Go Save Stash:</span>
+                <span>• GoTyme Withdrawable Reserve:</span>
                 <span className="font-bold">{formatPHP(gotymeVal)}</span>
               </div>
               <div className="flex justify-between">
@@ -447,15 +439,15 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
               {tableTitle} - Monthly Cash Flow Waterfall & Net Position
             </h2>
           </div>
-          <span className="font-mono text-xs font-bold text-indigo-900 bg-indigo-100 px-2.5 py-0.5 rounded">
-            Personal Savings: {formatPHP(personalSavings)}
+          <span className="font-mono text-xs font-bold text-emerald-900 bg-emerald-100 px-2.5 py-0.5 rounded">
+            Ending Balance: {formatPHP(balanceVal)}
           </span>
         </div>
 
         {/* 4 Waterfall Stages */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-            <span className="text-[10px] font-bold text-emerald-800 uppercase block">1. Total Annual Salary</span>
+            <span className="text-[10px] font-bold text-emerald-800 uppercase block">1. Gross Salary</span>
             <div className="font-mono text-base font-extrabold text-emerald-950 my-1">
               {formatPHP(salaryVal)}
             </div>
@@ -478,37 +470,45 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             <span className="text-[10px] text-blue-700">Withdrawn ATM Cash</span>
           </div>
 
-          <div className="bg-emerald-50/80 border border-emerald-300 rounded-xl p-3">
-            <span className="text-[10px] font-bold text-emerald-900 uppercase block">4. Gov: MP2</span>
-            <div className="font-mono text-base font-extrabold text-emerald-950 my-1">
+          <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-amber-900 uppercase block">4. MP2 (Locked)</span>
+            <div className="font-mono text-base font-extrabold text-amber-950 my-1">
               {formatPHP(Math.abs(governmentSavings))}
             </div>
-            <span className="text-[10px] text-emerald-700">Pag-IBIG MP2 Government Stash</span>
+            <span className="text-[10px] text-amber-700">Pag-IBIG MP2 Non-Withdrawable</span>
           </div>
         </div>
 
-        {/* Final Net Personal Savings Box */}
-        <div className="bg-indigo-50/90 border-2 border-indigo-300 rounded-xl p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-950 uppercase tracking-wide">
-              5. Final Net Personal Savings
-            </span>
-            <span className="text-[11px] bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 rounded-full">
-              GoTyme + Ending Balance
-            </span>
-          </div>
-          <div className="font-mono text-2xl font-black text-indigo-950">
-            {formatPHP(personalSavings)}
-          </div>
-          <div className="text-xs text-indigo-900 bg-white/80 p-2.5 rounded-lg border border-indigo-200/70 font-mono space-y-1">
-            <div className="flex justify-between">
-              <span>• GoTyme Go Save Stash:</span>
-              <span className="font-bold">{formatPHP(gotymeVal)}</span>
+        {/* Separate Final Stage Boxes: GoTyme & Ending Balance */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-teal-50/90 border border-teal-300 rounded-xl p-4 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-teal-950 uppercase tracking-wide">
+                5. GoTyme Savings
+              </span>
+              <span className="text-[11px] bg-teal-200 text-teal-900 font-bold px-2 py-0.5 rounded-full">
+                Withdrawable
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span>• Liquid Ending Balance:</span>
-              <span className="font-bold">{formatPHP(balanceVal)}</span>
+            <div className="font-mono text-2xl font-black text-teal-950">
+              {formatPHP(gotymeVal)}
             </div>
+            <p className="text-xs text-teal-800">Accessible liquid reserve stored in GoTyme Bank.</p>
+          </div>
+
+          <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-xl p-4 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                6. Ending Balance
+              </span>
+              <span className="text-[11px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
+                Net Surplus
+              </span>
+            </div>
+            <div className="font-mono text-2xl font-black text-emerald-950">
+              {formatPHP(balanceVal)}
+            </div>
+            <p className="text-xs text-emerald-800">Formula: (Salary - Total Bills) - (MP2 + GoTyme)</p>
           </div>
         </div>
       </div>
@@ -538,9 +538,8 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
                 <th className="py-2.5 px-3">Calendar Month</th>
                 <th className="py-2.5 px-3 text-right">Total Bills</th>
                 <th className="py-2.5 px-3 text-right">Gross Salary</th>
-                <th className="py-2.5 px-3 text-right">Pag-IBIG MP2</th>
-                <th className="py-2.5 px-3 text-right">Personal Savings</th>
-                <th className="py-2.5 px-3 text-right">Total Stash</th>
+                <th className="py-2.5 px-3 text-right">MP2 (Locked)</th>
+                <th className="py-2.5 px-3 text-right">GoTyme (Withdrawable)</th>
                 <th className="py-2.5 px-3 text-right">Ending Balance</th>
               </tr>
             </thead>
@@ -550,9 +549,8 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
                   <td className="py-2.5 px-3 font-sans font-semibold text-slate-900">{hm.name}</td>
                   <td className="py-2.5 px-3 text-right text-rose-700 font-bold">{formatPHP(hm.expenses)}</td>
                   <td className="py-2.5 px-3 text-right text-emerald-700 font-bold">{formatPHP(hm.salary)}</td>
-                  <td className="py-2.5 px-3 text-right text-teal-700 font-bold">{formatPHP(hm.govSavings)}</td>
-                  <td className="py-2.5 px-3 text-right text-indigo-700 font-bold">{formatPHP(hm.personalSavings)}</td>
-                  <td className="py-2.5 px-3 text-right font-black text-emerald-950">{formatPHP(hm.totalSavings)}</td>
+                  <td className="py-2.5 px-3 text-right text-amber-700 font-bold">{formatPHP(hm.govSavings)}</td>
+                  <td className="py-2.5 px-3 text-right text-teal-700 font-bold">{formatPHP(hm.gotymeSavings)}</td>
                   <td className="py-2.5 px-3 text-right font-bold">{formatPHP(hm.balance)}</td>
                 </tr>
               ))}
@@ -563,7 +561,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
 
       {/* Footer verification note */}
       <div className="pt-3 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
-        PesoBudget Comprehensive Financial Analytics Ledger · Developed with Google AI Studio © 2026
+        PesoBudget Comprehensive Financial Analytics Ledger © 2026
       </div>
     </div>
   );

@@ -305,7 +305,7 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
       )}
 
       {/* Main Modern Sheet Dock Container */}
-      <div className="w-full mt-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs p-1 select-none text-xs lg:text-sm font-sans transition-colors">
+      <div className="w-full mt-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs p-1 select-none text-xs sm:text-[13px] lg:text-sm font-sans transition-colors">
         <div className="flex items-center gap-1.5">
           {/* Scroll controls (left) */}
           <button
@@ -336,19 +336,19 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
                       setPopupMode('menu');
                     }
                   }}
-                  className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs lg:text-sm transition-all shrink-0 cursor-pointer ${
+                  className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-[13px] lg:text-sm transition-all shrink-0 cursor-pointer ${
                     isActive
                       ? 'bg-slate-900 dark:bg-emerald-600 text-white font-bold shadow-xs'
-                      : 'bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium border border-slate-200/70 dark:border-slate-700'
+                      : 'bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-medium border border-slate-200/80 dark:border-slate-700'
                   } ${isMenuOpen ? 'ring-2 ring-emerald-500' : ''}`}
                   title={`Switch to ${m.name}`}
                 >
                   {isActive ? (
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-white inline-block shrink-0 animate-pulse" />
                   ) : (
-                    <Layers className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 shrink-0" />
+                    <Layers className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 shrink-0" />
                   )}
-                  <span className="whitespace-nowrap font-medium tracking-tight">{m.name}</span>
+                  <span className="whitespace-nowrap font-semibold tracking-tight">{m.name}</span>
 
                   {/* 3-dots action button placed cleanly inside sheet pill */}
                   <button
@@ -360,7 +360,7 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
                     className={`p-1 rounded-md transition-colors cursor-pointer -mr-1 ${
                       isActive
                         ? 'text-slate-300 dark:text-emerald-100 hover:text-white hover:bg-slate-800 dark:hover:bg-emerald-700'
-                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/60 dark:hover:bg-slate-600/60'
+                        : 'text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/60 dark:hover:bg-slate-600/60'
                     }`}
                     title="Sheet options: Rename, Duplicate, Delete"
                   >
@@ -375,7 +375,7 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
               onClick={() => {
                 if (onOpenSummarySheet) onOpenSummarySheet();
               }}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs lg:text-sm transition-all shrink-0 cursor-pointer ${
+              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-[13px] lg:text-sm transition-all shrink-0 cursor-pointer ${
                 isSummaryActive
                   ? 'bg-emerald-700 dark:bg-emerald-600 text-white font-bold shadow-xs'
                   : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-semibold border border-emerald-200/80 dark:border-emerald-800'
@@ -391,7 +391,7 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
               onClick={() => {
                 if (onOpenChangeLog) onOpenChangeLog();
               }}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs lg:text-sm transition-all shrink-0 cursor-pointer ${
+              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-[13px] lg:text-sm transition-all shrink-0 cursor-pointer ${
                 isChangeLogActive
                   ? 'bg-blue-700 dark:bg-blue-600 text-white font-bold shadow-xs'
                   : 'bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-semibold border border-blue-200/80 dark:border-blue-800'
@@ -405,10 +405,10 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
             {/* Plus Button to Add New Sheet */}
             <button
               onClick={onAddNewMonth}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white border border-dashed border-slate-300 dark:border-slate-600 font-medium text-xs lg:text-sm transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white border border-dashed border-slate-300 dark:border-slate-600 font-semibold text-xs sm:text-[13px] lg:text-sm transition-colors cursor-pointer shrink-0"
               title="Add new sheet"
             >
-              <Plus className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+              <Plus className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
               <span className="hidden sm:inline">Add Sheet</span>
             </button>
           </div>

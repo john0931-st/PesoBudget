@@ -26,7 +26,7 @@ function toPdfSafeText(input: string): string {
     .replace(/[‘’]/g, "'")
     .replace(/[—–]/g, '-')
     .replace(/·/g, '|')
-    .replace(/✓/g, 'OK')
+    .replace(/✓/g, 'Settled')
     .replace(/[^\x20-\x7E\n\r\t]/g, '');
 }
 
@@ -212,20 +212,21 @@ export function downloadUserManualPdf(): {
         }
 
         const rightControls = [
-          { label: '2026', x: winX + 292, w: 32, bg: [30, 41, 59] as [number, number, number] },
-          { label: '+ Add Sheet', x: winX + 328, w: 52, bg: [5, 150, 105] as [number, number, number] },
-          { label: 'Theme', x: winX + 384, w: 32, bg: [51, 65, 85] as [number, number, number] },
-          { label: 'Online', x: winX + 420, w: 34, bg: [6, 95, 70] as [number, number, number] },
-          { label: 'Settings', x: winX + 458, w: 34, bg: [51, 65, 85] as [number, number, number] },
+          { label: '2026', x: winX + 282, w: 28, bg: [30, 41, 59] as [number, number, number] },
+          { label: 'PHP', x: winX + 313, w: 24, bg: [30, 41, 59] as [number, number, number] },
+          { label: '+ Sheet', x: winX + 340, w: 42, bg: [5, 150, 105] as [number, number, number] },
+          { label: 'Theme', x: winX + 385, w: 30, bg: [51, 65, 85] as [number, number, number] },
+          { label: 'Synced', x: winX + 418, w: 34, bg: [6, 95, 70] as [number, number, number] },
+          { label: 'Settings', x: winX + 455, w: 35, bg: [51, 65, 85] as [number, number, number] },
         ];
         for (const rc of rightControls) {
           doc.setFillColor(rc.bg[0], rc.bg[1], rc.bg[2]);
           doc.roundedRect(rc.x, topY + 4, rc.w, 14, 2.5, 2.5, 'F');
-          doc.setFontSize(6);
+          doc.setFontSize(5.8);
           doc.setTextColor(255, 255, 255);
           doc.text(rc.label, rc.x + rc.w / 2, topY + 12.8, { align: 'center' });
         }
-        drawCalloutBadge(winX + 272, topY + 11, '1', [220, 38, 38]);
+        drawCalloutBadge(winX + 266, topY + 11, '1', [220, 38, 38]);
 
         // 2. Formula Bar
         const fbY = topY + 22;
@@ -298,7 +299,7 @@ export function downloadUserManualPdf(): {
             label: 'House / Rent',
             m: 'PHP 8,500.00',
             k: 'PHP 0.00',
-            r: 'OK',
+            r: 'Settled',
             merged: false,
             bg: [255, 255, 255],
             fg: [15, 23, 42],
@@ -307,7 +308,7 @@ export function downloadUserManualPdf(): {
             label: 'QR PH',
             m: 'PHP 1,250.00 (Merged)',
             k: '',
-            r: 'OK',
+            r: 'Settled',
             merged: true,
             bg: [238, 242, 255],
             fg: [49, 46, 129],
@@ -331,25 +332,25 @@ export function downloadUserManualPdf(): {
             fg: [12, 74, 110],
           },
           {
-            label: 'Salary  [Breakdown]',
+            label: 'SALARY',
             m: 'PHP 38,000.00',
             k: '',
             r: 'PHP 38,000.00',
             merged: true,
-            bg: [255, 228, 230],
-            fg: [136, 19, 55],
+            bg: [237, 233, 254],
+            fg: [76, 29, 149],
           },
           {
             label: 'Pag-IBIG MP2 / GoTyme',
             m: 'PHP 10,000.00',
             k: '',
-            r: 'OK',
+            r: 'Settled',
             merged: true,
             bg: [254, 243, 199],
             fg: [120, 53, 15],
           },
           {
-            label: 'Balance (Net Surplus)',
+            label: 'BALANCE (Net Surplus)',
             m: 'PHP 14,350.00',
             k: '',
             r: 'PHP 15,600.00',
@@ -391,7 +392,7 @@ export function downloadUserManualPdf(): {
         drawCalloutBadge(tblX + tblW - 4, hdrY + 34, '3', [15, 23, 42]);
 
         // 4. Floating Micro-Action Bar
-        const barW = 248;
+        const barW = 270;
         const barX = winX + (winW - barW) / 2;
         const barY = topY + 137;
         doc.setFillColor(15, 23, 42);
@@ -399,7 +400,7 @@ export function downloadUserManualPdf(): {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(6.2);
         doc.setTextColor(255, 255, 255);
-        doc.text('fx Formula   |   Edit   |   Merge / Unmerge   |   Clear   |   Note', barX + barW / 2, barY + 9.5, {
+        doc.text('fx Formula  |  Edit  |  Breakdown  |  Merge  |  Clear  |  Note', barX + barW / 2, barY + 9.5, {
           align: 'center',
         });
         drawCalloutBadge(barX + barW + 10, barY + 7.5, '4', [124, 58, 237]);
@@ -428,9 +429,9 @@ export function downloadUserManualPdf(): {
         // Callout Legend Row
         const legY = topY + 188;
         const legendItems: Array<{ num: string; text: string; color: [number, number, number]; x: number; yOff: number }> = [
-          { num: '1', text: 'Top Bar (Tabs, Year, Add, Theme, Settings)', color: [220, 38, 38], x: winX + 8, yOff: 0 },
-          { num: '2', text: 'Formula Bar (fx & Notes)', color: [2, 132, 199], x: winX + 188, yOff: 0 },
-          { num: '3', text: 'Color-Coded Table Rows', color: [15, 23, 42], x: winX + 332, yOff: 0 },
+          { num: '1', text: 'Top Bar (Tabs, Year, Currency, Add, Theme, Sync, Settings)', color: [220, 38, 38], x: winX + 8, yOff: 0 },
+          { num: '2', text: 'Formula Bar (fx & Notes)', color: [2, 132, 199], x: winX + 216, yOff: 0 },
+          { num: '3', text: 'Color-Coded Table Rows', color: [15, 23, 42], x: winX + 344, yOff: 0 },
           { num: '4', text: 'Floating Cell Action Pill (appears on cell tap)', color: [124, 58, 237], x: winX + 8, yOff: 16 },
           { num: '5', text: 'Bottom Month Sheet Tabs', color: [217, 119, 6], x: winX + 230, yOff: 16 },
         ];
@@ -517,9 +518,9 @@ export function downloadUserManualPdf(): {
         const optW = (panelW - 28) / 3;
         const optY = topY + 24;
         const opts: Array<{ title: string; sub: string; bg: [number, number, number]; border: [number, number, number]; fg: [number, number, number] }> = [
-          { title: 'OK', sub: 'Paid', bg: [5, 150, 105], border: [4, 120, 87], fg: [255, 255, 255] },
-          { title: 'Next Payroll', sub: 'Deferred', bg: [239, 246, 255], border: [59, 130, 246], fg: [30, 64, 175] },
-          { title: 'None', sub: 'Clear', bg: [241, 245, 249], border: [148, 163, 184], fg: [51, 65, 85] },
+          { title: 'Settled', sub: 'Paid', bg: [5, 150, 105], border: [4, 120, 87], fg: [255, 255, 255] },
+          { title: 'Deferred', sub: 'Next Pay', bg: [254, 243, 199], border: [217, 119, 6], fg: [146, 64, 14] },
+          { title: 'Clear', sub: 'Unset (-)', bg: [241, 245, 249], border: [148, 163, 184], fg: [51, 65, 85] },
         ];
         opts.forEach((opt, i) => {
           const ox = rightX + 8 + i * (optW + 6);
@@ -742,13 +743,13 @@ export function downloadUserManualPdf(): {
         const balW = 148;
 
         // Salary
-        doc.setFillColor(255, 228, 230);
-        doc.setDrawColor(225, 29, 72);
+        doc.setFillColor(237, 233, 254);
+        doc.setDrawColor(124, 58, 237);
         doc.roundedRect(innerX, botY, sW, boxH, 3, 3, 'FD');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.2);
-        doc.setTextColor(136, 19, 55);
-        doc.text('Salary (Rose)', innerX + 6, botY + 12);
+        doc.setTextColor(76, 29, 149);
+        doc.text('Salary (Violet)', innerX + 6, botY + 12);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.2);
         doc.text('Base + Prev Balance', innerX + 6, botY + 23);
@@ -797,9 +798,9 @@ export function downloadUserManualPdf(): {
         doc.setFillColor(209, 250, 229);
         doc.setDrawColor(5, 150, 105);
         doc.roundedRect(balX, botY, balW, boxH, 3, 3, 'FD');
-        doc.setFontSize(7.5);
+        doc.setFontSize(7.2);
         doc.setTextColor(6, 78, 59);
-        doc.text('Balance (Emerald)', balX + 6, botY + 12);
+        doc.text('Balance (Emerald / Rose Pulse)', balX + 6, botY + 12);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.2);
         doc.text('(Salary - Total) - (MP2 + GoTyme)', balX + 6, botY + 23);
@@ -827,15 +828,15 @@ export function downloadUserManualPdf(): {
           {
             num: '2',
             title: 'Set Salary',
-            uiTop: 'Salary [Breakdown]',
+            uiTop: 'SALARY -> Breakdown',
             uiBody: 'Base Salary\n+ Prev Balance',
-            accent: [225, 29, 72] as [number, number, number],
+            accent: [124, 58, 237] as [number, number, number],
           },
           {
             num: '3',
             title: 'Log Bills',
             uiTop: '=1500+320',
-            uiBody: 'Set Remarks:\n[OK] / [Next Pay]',
+            uiBody: 'Remarks:\nSettled / Deferred',
             accent: [2, 132, 199] as [number, number, number],
           },
           {
@@ -931,28 +932,28 @@ export function downloadUserManualPdf(): {
   drawSectionHeading('2', 'Workspace Layout Description');
   const workspaceAreas: FunctionDocRow[] = [
     {
-      feature: 'Top Navigation Bar',
+      feature: 'Top Navigation & Summary Strip',
       location: 'Top of screen',
       explanation:
-        'Hosts sheet view tabs, fiscal year selector, Add Sheet button, Import/Export menu, Light/Dark theme switch, online status indicator, and Settings.',
+        'Centers view tabs, compact Year selector, neutral Add Sheet and Import/Export/Print buttons with green icons, Currency toggle, Light/Dark mode (Dark default), Sync badge, Settings, and live Metrobank/Salary/Balance totals.',
     },
     {
       feature: 'Formula Bar',
       location: 'Above the table',
       explanation:
-        'Displays the selected cell label, live PHP formula evaluation box, and quick cell note button.',
+        'Displays the selected cell label (including custom column names), live formula evaluation box, and quick cell note button.',
     },
     {
-      feature: 'Budget Table',
+      feature: 'Budget Table & Filter Strip',
       location: 'Main center canvas',
       explanation:
-        'Presents your Payments, Monthly, 15th Kinsenas, Remarks, and custom columns with automatic row totals and color-coded summary rows.',
+        'Provides Undo/Redo header buttons, a Remarks status filter bar (All, Settled, Deferred, Unset) with one-tap Settle Unset, 4-way keyboard navigation, negative signs beside numbers, all-caps SALARY/BALANCE rows, and Emerald or pulsing Rose balances.',
     },
     {
       feature: 'Active Cell Action Bar',
       location: 'Floating bottom bar',
       explanation:
-        'Appears when any cell is tapped so you can edit values, launch the formula editor, merge or unmerge cells, clear values, or attach notes.',
+        'Appears when any cell is tapped so you can edit values, launch formulas, open Salary Breakdown, move rows, merge or unmerge cells, clear values, or attach notes.',
     },
     {
       feature: 'Bottom Sheet Tabs',
@@ -993,10 +994,22 @@ export function downloadUserManualPdf(): {
 
   const spreadsheetFunctions: FunctionDocRow[] = [
     {
-      feature: 'Cell Selection & Edit',
+      feature: 'Cell Selection & Keyboard Nav',
       location: 'Any table cell',
       explanation:
-        'Tap a cell once to select it in the action bar, or tap again or double-click to edit numbers directly.',
+        'Tap once or move with Arrow keys and Tab to select cells, and press Enter, F2, or double-click to edit inline (or Escape to cancel).',
+    },
+    {
+      feature: 'Undo & Redo History',
+      location: 'Table Header / Ctrl+Z & Ctrl+Y',
+      explanation:
+        'Reverses or reapplies recent worksheet edits, row moves, merges, clears, and batch remark updates with keyboard shortcuts or header buttons.',
+    },
+    {
+      feature: 'Remarks Filter & Batch Settle',
+      location: 'Strip above column headers',
+      explanation:
+        'Filters visible expense bills by All, Settled, Deferred, or Unset status while keeping totals visible, and includes a Settle Unset shortcut.',
     },
     {
       feature: 'Formula Input (=)',
@@ -1032,13 +1045,19 @@ export function downloadUserManualPdf(): {
       feature: 'Remarks Selector',
       location: 'Remarks column (expense rows)',
       explanation:
-        'Sets a bill to OK when paid, Next Payroll when carried forward, or None to clear status.',
+        'Sets a bill to Settled when paid, Deferred when moved to the next payroll, or Clear (-) to leave status unset.',
     },
     {
       feature: 'Withdrawn Cash Input',
       location: 'Metrobank Remarks cell',
       explanation:
         'Records your actual ATM cash withdrawn so the Total and Balance remarks compare planned versus real spending.',
+    },
+    {
+      feature: 'Reorder Expense Rows',
+      location: 'Table Row Drag / Cell Bar Up & Down',
+      explanation:
+        'Moves expense rows smoothly via drag-and-drop or the floating action bar Up/Down arrows to arrange bill priority.',
     },
     {
       feature: 'Add / Remove Line Items',
@@ -1080,61 +1099,67 @@ export function downloadUserManualPdf(): {
         'Automatically adds Metrobank cash obligations and QR PH digital spending for each payroll cutoff.',
     },
     {
-      feature: 'Salary & Breakdown',
-      location: 'Table -> Salary -> Breakdown',
+      feature: 'SALARY & Breakdown',
+      location: 'Select SALARY Row -> Breakdown',
       explanation:
-        'Adds your entered base pay and any carried previous balance into total available funds per cutoff.',
+        'Tap the SALARY row and pick Breakdown in the floating bar (or double-click SALARY Monthly/Kinsenas) to set Base Pay and Previous Balance.',
     },
     {
       feature: 'Pag-IBIG MP2 Row',
       location: 'Table -> Pag-IBIG MP2',
       explanation:
-        'Records long-term government savings allocations subtracted before calculating your ending balance.',
+        'Records long-term locked government savings allocations subtracted before calculating your ending balance.',
     },
     {
       feature: 'GoTyme Row',
       location: 'Table -> GoTyme',
       explanation:
-        'Tracks liquid personal bank savings set aside separately from daily bills before computing surplus balance.',
+        'Tracks withdrawable personal bank savings set aside separately from daily bills before computing ending balance.',
     },
     {
-      feature: 'Balance Row',
-      location: 'Table -> Balance',
+      feature: 'BALANCE Row',
+      location: 'Table -> BALANCE',
       explanation:
-        'Automatically computes net remaining surplus using the formula (Salary - Total) - (MP2 + GoTyme).',
+        'Automatically computes net remaining balance via (SALARY - Total) - (MP2 + GoTyme) and pulses softly in rose whenever negative.',
     },
   ];
 
   const navigationAndSyncFunctions: FunctionDocRow[] = [
     {
-      feature: 'Fiscal Year Selector',
-      location: 'Top Bar -> Year Dropdown',
+      feature: 'Fiscal Year & Currency Toggle',
+      location: 'Top Bar -> Year / Currency',
       explanation:
-        'Filters sheets by fiscal year and lets you add or delete managed calendar years.',
+        'Filters sheets by calendar year and switches display amounts across PHP, USD, EUR, JPY, and other international currencies.',
     },
     {
-      feature: 'Add Sheet',
+      feature: 'Adaptive Screen Layout',
+      location: 'Automatic Across Devices',
+      explanation:
+        'Scales table width, padding, and font sizes smoothly from mobile screens to desktop monitors using vertical-only scrolling.',
+    },
+    {
+      feature: 'Add Sheet & Deferred Carryover',
       location: 'Top Bar -> Add Sheet',
       explanation:
-        'Creates a new month sheet by copying your active sheet or starting from a Clean Default Template with optional Previous Balance.',
+        'Creates a new month sheet by copying your active sheet or starting from Clean Default Template with optional Previous Balance and Deferred bill carryover.',
     },
     {
       feature: 'Summary & Charts',
       location: 'Top Bar -> Summary / Charts Tabs',
       explanation:
-        'Visualizes cash versus digital distribution, monthly historical trends, and combined savings across the selected year.',
+        'Visualizes cash versus digital distribution, monthly Salary vs Expenses bars, and strictly separated Pag-IBIG MP2 (Locked), GoTyme (Withdrawable), and Ending Balance metrics.',
     },
     {
-      feature: 'Audit Change Log',
+      feature: 'Audit Change Log & Dialogs',
       location: 'Top Bar -> Change Log',
       explanation:
-        'Logs every cell edit, formula update, merge change, rename, and row addition with timestamps and old-to-new values.',
+        'Logs every cell edit, batch remark change, formula update, merge, rename, and deletion while using styled in-app confirmation dialogs.',
     },
     {
       feature: 'Light / Dark Mode Toggle',
-      location: 'Top Bar (beside Online indicator)',
+      location: 'Top Bar (beside Sync indicator)',
       explanation:
-        'Switches the entire workspace interface between crisp Light mode and high-contrast Dark mode.',
+        'Defaults to Dark mode and switches the entire workspace smoothly between high-contrast Dark mode and crisp Light mode.',
     },
     {
       feature: 'Import / Export & Print',
@@ -1149,10 +1174,10 @@ export function downloadUserManualPdf(): {
         'Signs in with Google Firebase to upload backups, sync edits automatically online, and restore saved workbook snapshots.',
     },
     {
-      feature: 'Offline Queue & Sync',
-      location: 'Top Bar -> Online / Offline Badge',
+      feature: 'Auto-Save & Sync Indicator',
+      location: 'Top Bar -> Synced / Saving Badge',
       explanation:
-        'Queues changes automatically while offline and prompts a one-tap cloud upload as soon as internet connectivity returns.',
+        'Shows real-time save and Firebase sync status while automatically queuing offline edits until connectivity returns.',
     },
     {
       feature: 'Portable HTML Folder ZIP',
@@ -1233,27 +1258,27 @@ export function downloadUserManualPdf(): {
     [
       'Step 1',
       'Create Your First Sheet',
-      'Click Add Sheet in the top bar, choose Clean Default Template, select your target fiscal year, and choose No Previous Balance if you are starting fresh.',
+      'Click Add Sheet in the top bar, choose Clean Default Template, select your target year, and toggle Previous Balance or Deferred Bills carryover as needed.',
     ],
     [
       'Step 2',
       'Set Your Payroll Salary',
-      'Click Breakdown on the Salary row to enter your Base Salary and any Previous Balance for both Monthly and 15th Kinsenas cutoffs.',
+      'Tap the SALARY row and pick Breakdown in the floating bar (or double-click SALARY Monthly/Kinsenas) to enter your Base Salary and Previous Balance.',
     ],
     [
       'Step 3',
-      'Enter Recurring Expenses',
-      'Tap any bill cell under Monthly or Kinsenas to type an amount or a formula like =1500+320, then set Remarks to OK (paid) or Next Payroll (deferred).',
+      'Log Bills & Filter Remarks',
+      'Navigate with Arrows or Tab, enter amounts or formulas like =1500+320, set Remarks (Settled / Deferred), and use the Filter strip or Settle Unset button.',
     ],
     [
       'Step 4',
-      'Track QR PH & Savings',
-      'Enter digital expenses in QR PH and set aside monthly savings in Pag-IBIG MP2 and GoTyme so Balance automatically shows your real remaining surplus.',
+      'Track QR PH, MP2 & GoTyme',
+      'Record digital spending in QR PH, locked savings in Pag-IBIG MP2, and withdrawable savings in GoTyme while tracking Ending Balance separately.',
     ],
     [
       'Step 5',
-      'Customize Layout & Merges',
-      'Use the PAYMENTS menu to add custom bills, use the title 3-dots menu to add columns, and use Merge / Unmerge in the cell bar or title menu to combine or split columns.',
+      'Customize, Undo & Merge',
+      'Reorder bills by dragging or arrow buttons, use Undo/Redo (Ctrl+Z / Ctrl+Y) anytime, and merge or split columns cleanly via the cell bar or 3-dots menus.',
     ],
     [
       'Step 6',
@@ -1294,9 +1319,10 @@ export function downloadUserManualPdf(): {
   y += 14;
 
   const tips: string[] = [
-    '- Keep Metrobank-linked bills (House, Loan, Water, Electric, Gas, Meal, Load, Others) updated so your ATM withdrawal total stays exact.',
-    '- Use formulas starting with = (for example =850+420+190) whenever you split grocery or utility receipts across multiple purchases.',
-    '- When you unmerge QR PH, Salary, MP2, or GoTyme, you can track distinct Monthly and 15th Kinsenas amounts independently.',
+    '- Keep Metrobank-linked bills updated and use Settle Unset or the Remarks Filter bar to verify every obligation before cutoff.',
+    '- Use keyboard shortcuts: Arrow keys & Tab navigate cells, Enter/F2 opens editing, and Ctrl+Z / Ctrl+Y undoes or redoes changes.',
+    '- Pag-IBIG MP2 (locked) and GoTyme (withdrawable) are always reported separately from Ending Balance so liquid cash stays accurate.',
+    '- Mark unpaid bills as Deferred so Add Sheet -> Clean Default Template can offer automatic carryover into your next payroll cutoff.',
     '- Do not delete or clear local browser data without either signing into Google Cloud Sync or saving a Portable ZIP / JSON backup first.',
     '- When new updates are published on the public web link, read the automatic changelog popup and click OK to confirm or refresh cleanly.',
   ];

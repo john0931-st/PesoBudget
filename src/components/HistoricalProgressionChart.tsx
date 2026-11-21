@@ -76,8 +76,8 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
           expenses: cm.totalExpenses,
           salary: cm.salaryVal,
           balance: cm.balanceVal,
-          governmentSavings: cm.governmentSavings,
-          personalSavings: cm.personalSavings,
+          mp2: Math.abs(cm.governmentSavings),
+          gotyme: Math.abs(cm.gotymeVal),
           sheetCount: cm.sheetCount,
           firstSheetId: cm.sheets[0]?.id,
           isCurrent:
@@ -96,8 +96,8 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
         expenses: 0,
         salary: 0,
         balance: 0,
-        governmentSavings: 0,
-        personalSavings: 0,
+        mp2: 0,
+        gotyme: 0,
         sheetCount: 0,
         firstSheetId: undefined,
         isCurrent: false,
@@ -119,48 +119,85 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
   const totalYearSalary = fullYearMonths.reduce((acc, d) => acc + d.salary, 0);
   const totalYearExpenses = fullYearMonths.reduce((acc, d) => acc + d.expenses, 0);
 
-  return (
-    <div className="space-y-2 animate-in fade-in duration-150 w-full select-none">
-      {/* Header & Legend */}
-      <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5 lg:pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-              January to December Historical Progression
-            </h3>
-            <span className="font-mono text-[10px] lg:text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-              {recordedCount}/12 Months
-            </span>
-          </div>
-          <p className="text-[10px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400">
-            Compact 12-month calendar view with all months, salaries, and expenses visible simultaneously
-          </p>
-        </div>
+  // Separate yearly totals for MP2 (non-withdrawable) and GoTyme (withdrawable) — never added together
+  const totalYearMp2 = fullYearMonths.reduce((acc, d) => acc + (d.hasData ? d.mp2 : 0), 0);
+  const totalYearGotyme = fullYearMonths.reduce((acc, d) => acc + (d.hasData ? d.gotyme : 0), 0);
 
-        <div className="flex items-center gap-3 text-xs lg:text-sm font-mono self-start sm:self-auto shrink-0">
-          <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-            <span className="w-2.5 h-2.5 lg:w-3 lg:h-3 bg-slate-900 dark:bg-sky-400 rounded-xs inline-block shadow-2xs" />
-            <span className="font-sans font-semibold text-[10px] lg:text-xs">Expenses</span>
-          </span>
-          <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
-            <span className="w-2.5 h-2.5 lg:w-3 lg:h-3 bg-emerald-600 dark:bg-emerald-500 rounded-xs inline-block shadow-2xs" />
-            <span className="font-sans font-semibold text-[10px] lg:text-xs">Salary</span>
+  // Dynamic Y-axis scale for MP2 vs GoTyme savings chart
+  const highestSavings = Math.max(
+    ...fullYearMonths.map((d) => Math.max(d.mp2, d.gotyme)),
+    2000
+  );
+  const savStep =
+    highestSavings > 40000
+      ? 10000
+      : highestSavings > 15000
+      ? 5000
+      : highestSavings > 5000
+      ? 2000
+      : 1000;
+  const savMax = Math.ceil(highestSavings / savStep) * savStep;
+  const savTicks = [savMax, savMax * 0.75, savMax * 0.5, savMax * 0.25, 0];
+
+  const formatCompactTick = (val: number) => {
+    const sym = currency.symbol.trim();
+    if (val === 0) return `${sym}0`;
+    const absVal = Math.abs(val);
+    let label: string;
+    if (absVal >= 1000) {
+      const k = absVal / 1000;
+      label = Number.isInteger(k) ? `${k}k` : `${Number(k.toFixed(1))}k`;
+    } else {
+      label = `${Math.round(absVal)}`;
+    }
+    return val < 0 ? `${sym}-${label}` : `${sym}${label}`;
+  };
+
+  return (
+    <div className="flex-1 flex flex-col justify-between gap-2.5 lg:gap-3 min-h-0 animate-in fade-in duration-150 w-full select-none">
+      {/* Header */}
+      <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5 lg:pb-2 flex flex-wrap items-center justify-between gap-1.5 shrink-0">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm sm:text-base lg:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+            January to December Historical Progression
+          </h3>
+          <span className="font-mono tabular-nums text-xs font-semibold text-slate-600 dark:text-slate-300">
+            · {recordedCount}/12 Months
           </span>
         </div>
       </div>
 
-      {/* Main Chart Box */}
-      <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-4 space-y-1.5 lg:space-y-2.5">
+      {/* Top Chart Box: Monthly Salary vs Expenses */}
+      <div className="flex-1 min-h-[180px] flex flex-col justify-between bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+              Salary vs Expenses
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-[11px] lg:text-xs font-sans font-semibold">
+            <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+              <span className="w-2.5 h-2.5 bg-emerald-600 dark:bg-emerald-500 rounded-xs inline-block" />
+              <span>Salary</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+              <span className="w-2.5 h-2.5 bg-slate-900 dark:bg-sky-400 rounded-xs inline-block" />
+              <span>Expenses</span>
+            </span>
+          </div>
+        </div>
+
         {/* Graph Area */}
-        <div className="relative flex h-36 sm:h-44 lg:h-56 xl:h-64">
+        <div className="relative flex flex-1 min-h-[118px] sm:min-h-[140px]">
           {/* Y-Axis Label Column */}
-          <div className="w-11 sm:w-14 lg:w-16 flex flex-col justify-between items-end pr-1.5 sm:pr-2 py-0.5 select-none shrink-0 border-r border-slate-200 dark:border-slate-700">
+          <div className="w-12 sm:w-14 lg:w-16 flex flex-col justify-between items-end pr-1.5 sm:pr-2 py-0.5 select-none shrink-0 border-r border-slate-200 dark:border-slate-700">
             {yTicks.map((tick, i) => (
               <span
                 key={i}
-                className="text-[9px] sm:text-[10px] lg:text-xs font-mono font-medium text-slate-400 dark:text-slate-500 tabular-nums leading-none"
+                className="text-[11px] lg:text-xs font-mono font-medium text-slate-500 dark:text-slate-400 tabular-nums leading-none"
               >
-                {tick === 0 ? `${currency.symbol.trim()}0` : `${currency.symbol.trim()}${Math.round(tick / 1000)}k`}
+                {formatCompactTick(tick)}
               </span>
             ))}
           </div>
@@ -180,12 +217,14 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
             {/* 12 Columns Grid (Jan to Dec) */}
             <div className="relative z-10 w-full h-full grid grid-cols-12 gap-0.5 sm:gap-1.5 items-end pt-2 pb-0.5">
               {fullYearMonths.map((d) => {
-                const expHeight = d.hasData
-                  ? Math.max(5, Math.min(100, (d.expenses / yMax) * 100))
-                  : 0;
-                const salHeight = d.hasData
-                  ? Math.max(5, Math.min(100, (d.salary / yMax) * 100))
-                  : 0;
+                const expHeight =
+                  d.hasData && d.expenses > 0
+                    ? Math.max(5, Math.min(100, (d.expenses / yMax) * 100))
+                    : 0;
+                const salHeight =
+                  d.hasData && d.salary > 0
+                    ? Math.max(5, Math.min(100, (d.salary / yMax) * 100))
+                    : 0;
                 const isSelected = selectedMonthKey === d.key;
 
                 return (
@@ -204,30 +243,13 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
                     }`}
                     title={`${d.full} ${d.year}\n${
                       d.hasData
-                        ? `Gross Salary: ${formatPHP(d.salary)}\nTotal Bills: ${formatPHP(d.expenses)}\nSurplus: ${formatPHP(d.balance)} (${d.sheetCount} sheets)`
+                        ? `Gross Salary: ${formatPHP(d.salary)}\nTotal Bills: ${formatPHP(d.expenses)}\nBalance: ${formatPHP(d.balance)} (${d.sheetCount} sheets)`
                         : 'No records for this month'
                     }`}
                   >
-                    {/* Paired Vertical Bars */}
+                    {/* Paired Vertical Bars: First Salary, Second Expenses */}
                     <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 h-full pb-1">
-                      {/* Expenses Bar */}
-                      <div className="flex flex-col items-center flex-1 max-w-[14px] sm:max-w-[18px] lg:max-w-[22px] h-full justify-end">
-                        {d.hasData && expHeight > 0 ? (
-                          <div
-                            className="w-full bg-slate-900 dark:bg-sky-400 rounded-t-xs transition-all duration-300 group-hover:bg-black dark:group-hover:bg-sky-300 shadow-2xs relative group/bar"
-                            style={{ height: `${expHeight}%` }}
-                          >
-                            {/* Hover tooltip badge */}
-                            <div className="opacity-0 group-hover/bar:opacity-100 transition-opacity absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-slate-700 text-[9px] lg:text-xs font-mono px-1.5 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-30">
-                              Exp: {formatPHP(d.expenses)}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-full h-0.5 bg-slate-300/80 dark:bg-slate-700 rounded-xs" />
-                        )}
-                      </div>
-
-                      {/* Salary Bar */}
+                      {/* First Bar: Salary */}
                       <div className="flex flex-col items-center flex-1 max-w-[14px] sm:max-w-[18px] lg:max-w-[22px] h-full justify-end">
                         {d.hasData && salHeight > 0 ? (
                           <div
@@ -235,8 +257,25 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
                             style={{ height: `${salHeight}%` }}
                           >
                             {/* Hover tooltip badge */}
-                            <div className="opacity-0 group-hover/bar:opacity-100 transition-opacity absolute -top-6 left-1/2 -translate-x-1/2 bg-emerald-800 dark:bg-emerald-950 text-white border border-transparent dark:border-emerald-700 text-[9px] lg:text-xs font-mono px-1.5 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-30">
+                            <div className="opacity-0 group-hover/bar:opacity-100 transition-opacity absolute -top-6 left-1/2 -translate-x-1/2 bg-emerald-800 dark:bg-emerald-950 text-white border border-transparent dark:border-emerald-700 text-[11px] lg:text-xs font-mono tabular-nums px-1.5 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-30">
                               Sal: {formatPHP(d.salary)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-0.5 bg-slate-300/80 dark:bg-slate-700 rounded-xs" />
+                        )}
+                      </div>
+
+                      {/* Second Bar: Expenses */}
+                      <div className="flex flex-col items-center flex-1 max-w-[14px] sm:max-w-[18px] lg:max-w-[22px] h-full justify-end">
+                        {d.hasData && expHeight > 0 ? (
+                          <div
+                            className="w-full bg-slate-900 dark:bg-sky-400 rounded-t-xs transition-all duration-300 group-hover:bg-black dark:group-hover:bg-sky-300 shadow-2xs relative group/bar"
+                            style={{ height: `${expHeight}%` }}
+                          >
+                            {/* Hover tooltip badge */}
+                            <div className="opacity-0 group-hover/bar:opacity-100 transition-opacity absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-slate-700 text-[11px] lg:text-xs font-mono tabular-nums px-1.5 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-30">
+                              Exp: {formatPHP(d.expenses)}
                             </div>
                           </div>
                         ) : (
@@ -247,7 +286,7 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
 
                     {/* Month Label (Jan - Dec) */}
                     <div
-                      className={`text-[9px] sm:text-[11px] lg:text-xs xl:text-sm truncate w-full text-center transition-colors ${
+                      className={`text-[11px] sm:text-xs lg:text-[13px] truncate w-full text-center transition-colors ${
                         d.hasData
                           ? 'font-bold text-slate-900 dark:text-slate-100'
                           : 'font-medium text-slate-400 dark:text-slate-500'
@@ -263,19 +302,168 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
         </div>
 
         {/* Legend & Total Summary Strip */}
-        <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-xs lg:text-sm text-slate-600 dark:text-slate-400">
-          <div className="flex items-center gap-1.5 text-[11px] lg:text-xs xl:text-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-            <span>Full 12-Month Calendar Year ({activeYear})</span>
+        <div className="pt-1 border-t border-slate-200/70 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2 text-xs lg:text-sm text-slate-600 dark:text-slate-400 shrink-0">
+          <div className="text-xs lg:text-[13px] font-medium text-slate-600 dark:text-slate-300">
+            Cash Flow Overview ({activeYear})
           </div>
 
-          <div className="flex items-center gap-3 font-mono text-[11px] lg:text-xs xl:text-sm">
-            <span className="text-slate-700 dark:text-slate-300">
-              Year Bills: <strong className="text-slate-900 dark:text-sky-300">{formatPHP(totalYearExpenses)}</strong>
+          <div className="flex items-center gap-3 font-mono tabular-nums text-[11px] lg:text-xs xl:text-sm">
+            <span className="text-emerald-700 dark:text-emerald-400">
+              Salary: <strong className="text-emerald-900 dark:text-emerald-300">{formatPHP(totalYearSalary)}</strong>
             </span>
             <span>·</span>
-            <span className="text-emerald-700 dark:text-emerald-400">
-              Year Salary: <strong className="text-emerald-900 dark:text-emerald-300">{formatPHP(totalYearSalary)}</strong>
+            <span className="text-slate-700 dark:text-slate-300">
+              Bills: <strong className="text-slate-900 dark:text-sky-300">{formatPHP(totalYearExpenses)}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Chart Box: Monthly MP2 (Locked) vs GoTyme (Withdrawable) */}
+      <div className="flex-1 min-h-[180px] flex flex-col justify-between bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+              MP2 (Locked) vs GoTyme (Withdrawable)
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-[11px] lg:text-xs font-sans font-semibold">
+            <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 whitespace-nowrap">
+              <span className="w-2.5 h-2.5 bg-amber-500 dark:bg-amber-400 rounded-xs inline-block" />
+              <span>MP2</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-400 whitespace-nowrap">
+              <span className="w-2.5 h-2.5 bg-teal-600 dark:bg-teal-400 rounded-xs inline-block" />
+              <span>GoTyme</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Graph Area */}
+        <div className="relative flex flex-1 min-h-[118px] sm:min-h-[140px]">
+          {/* Y-Axis Label Column */}
+          <div className="w-12 sm:w-14 lg:w-16 flex flex-col justify-between items-end pr-1.5 sm:pr-2 py-0.5 select-none shrink-0 border-r border-slate-200 dark:border-slate-700">
+            {savTicks.map((tick, i) => (
+              <span
+                key={i}
+                className="text-[11px] lg:text-xs font-mono font-medium text-slate-500 dark:text-slate-400 tabular-nums leading-none"
+              >
+                {formatCompactTick(tick)}
+              </span>
+            ))}
+          </div>
+
+          {/* 12-Month Plot Area */}
+          <div className="relative flex-1 flex flex-col justify-between pl-1.5 sm:pl-3">
+            {/* Dotted Horizontal Grid Lines */}
+            <div className="absolute inset-x-1.5 sm:inset-x-3 inset-y-0.5 flex flex-col justify-between pointer-events-none z-0">
+              {savTicks.map((_, i) => (
+                <div
+                  key={i}
+                  className="w-full border-b border-dashed border-slate-300 dark:border-slate-700"
+                />
+              ))}
+            </div>
+
+            {/* 12 Columns Grid (Jan to Dec): Independent MP2 & GoTyme Bars */}
+            <div className="relative z-10 w-full h-full grid grid-cols-12 gap-0.5 sm:gap-1.5 items-end pt-2 pb-0.5">
+              {fullYearMonths.map((d) => {
+                const mp2Height =
+                  d.hasData && d.mp2 > 0
+                    ? Math.max(5, Math.min(100, (d.mp2 / savMax) * 100))
+                    : 0;
+                const gotymeHeight =
+                  d.hasData && d.gotyme > 0
+                    ? Math.max(5, Math.min(100, (d.gotyme / savMax) * 100))
+                    : 0;
+                const isSelected = selectedMonthKey === d.key;
+
+                return (
+                  <div
+                    key={`sav_${d.key}`}
+                    onClick={() => {
+                      setSelectedMonthKey(d.key);
+                      if (d.firstSheetId) onSelectMonth?.(d.firstSheetId);
+                    }}
+                    className={`flex flex-col items-center justify-end h-full w-full rounded transition-all cursor-pointer group py-0.5 px-0.5 ${
+                      d.isCurrent || isSelected
+                        ? 'bg-slate-200/80 dark:bg-slate-800/80 ring-1 ring-slate-400 dark:ring-slate-600 font-bold'
+                        : d.hasData
+                        ? 'hover:bg-slate-100/90 dark:hover:bg-slate-800/60'
+                        : 'opacity-65 hover:opacity-100'
+                    }`}
+                    title={`${d.full} ${d.year}\n${
+                      d.hasData
+                        ? `MP2 (Locked): ${formatPHP(d.mp2)}\nGoTyme (Withdrawable): ${formatPHP(d.gotyme)}`
+                        : 'No records for this month'
+                    }`}
+                  >
+                    {/* Paired Vertical Bars */}
+                    <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 h-full pb-1">
+                      {/* MP2 (Non-withdrawable) Bar */}
+                      <div className="flex flex-col items-center flex-1 max-w-[14px] sm:max-w-[18px] lg:max-w-[22px] h-full justify-end">
+                        {d.hasData && mp2Height > 0 ? (
+                          <div
+                            className="w-full bg-amber-500 dark:bg-amber-400 rounded-t-xs transition-all duration-300 group-hover:bg-amber-600 dark:group-hover:bg-amber-300 shadow-2xs relative group/bar"
+                            style={{ height: `${mp2Height}%` }}
+                          >
+                            <div className="opacity-0 group-hover/bar:opacity-100 transition-opacity absolute -top-6 left-1/2 -translate-x-1/2 bg-amber-900 dark:bg-amber-950 text-white border border-transparent dark:border-amber-700 text-[11px] lg:text-xs font-mono tabular-nums px-1.5 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-30">
+                              MP2: {formatPHP(d.mp2)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-0.5 bg-slate-300/80 dark:bg-slate-700 rounded-xs" />
+                        )}
+                      </div>
+
+                      {/* GoTyme (Withdrawable) Bar */}
+                      <div className="flex flex-col items-center flex-1 max-w-[14px] sm:max-w-[18px] lg:max-w-[22px] h-full justify-end">
+                        {d.hasData && gotymeHeight > 0 ? (
+                          <div
+                            className="w-full bg-teal-600 dark:bg-teal-400 rounded-t-xs transition-all duration-300 group-hover:bg-teal-700 dark:group-hover:bg-teal-300 shadow-2xs relative group/bar"
+                            style={{ height: `${gotymeHeight}%` }}
+                          >
+                            <div className="opacity-0 group-hover/bar:opacity-100 transition-opacity absolute -top-6 left-1/2 -translate-x-1/2 bg-teal-900 dark:bg-teal-950 text-white border border-transparent dark:border-teal-700 text-[11px] lg:text-xs font-mono tabular-nums px-1.5 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-30">
+                              GoTyme: {formatPHP(d.gotyme)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-0.5 bg-slate-300/80 dark:bg-slate-700 rounded-xs" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Month Label (Jan - Dec) */}
+                    <div
+                      className={`text-[11px] sm:text-xs lg:text-[13px] truncate w-full text-center transition-colors ${
+                        d.hasData
+                          ? 'font-bold text-slate-900 dark:text-slate-100'
+                          : 'font-medium text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {d.short}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Insight Footer (Separate Totals, Never Summed) */}
+        <div className="pt-1 border-t border-slate-200/70 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2 text-xs lg:text-sm text-slate-600 dark:text-slate-400 shrink-0">
+          <div className="text-xs lg:text-[13px] font-medium text-slate-600 dark:text-slate-300">
+            Non-withdrawable (MP2) vs Withdrawable (GoTyme)
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums text-[11px] lg:text-xs xl:text-sm">
+            <span className="text-amber-700 dark:text-amber-400">
+              MP2: <strong className="text-amber-900 dark:text-amber-300">{formatPHP(totalYearMp2)}</strong>
+            </span>
+            <span>·</span>
+            <span className="text-teal-700 dark:text-teal-400">
+              GoTyme: <strong className="text-teal-900 dark:text-teal-300">{formatPHP(totalYearGotyme)}</strong>
             </span>
           </div>
         </div>

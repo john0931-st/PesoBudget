@@ -180,23 +180,21 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
     governmentSavings,
     gotymeVal,
     balanceVal,
-    personalSavings,
-    totalCombinedSavings,
     salaryVal,
     settledAmount,
     nextPayrollAmount,
     settledCount,
     nextPayrollCount,
     settlementPercent,
-    savingsRate,
     govSavingsRate,
     expenseCategories,
     cutoffSummaries,
     sheets,
-    displayName,
     tableTitle,
     sheetCount,
   } = combinedMonth;
+
+  const gotymeRate = salaryVal > 0 ? Math.round((gotymeVal / salaryVal) * 100) : 0;
 
   const plannedTotal = plannedMetrobank + plannedQrPh;
 
@@ -329,10 +327,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
               </div>
               <div className="flex items-center gap-1.5 font-mono text-xs lg:text-sm self-start sm:self-auto">
                 <span className="text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-transparent dark:border-emerald-800/60 px-2.5 py-0.5 rounded font-bold">
-                  Net Surplus: {formatPHP(balanceVal)}
+                  Ending Balance: {formatPHP(balanceVal)}
                 </span>
-                <span className="text-indigo-800 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-transparent dark:border-indigo-800/60 px-2.5 py-0.5 rounded font-bold">
-                  Total Stash: {formatPHP(totalCombinedSavings)}
+                <span className="text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-transparent dark:border-teal-800/60 px-2.5 py-0.5 rounded font-bold">
+                  GoTyme: {formatPHP(gotymeVal)}
                 </span>
               </div>
             </div>
@@ -341,76 +339,76 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3 shrink-0">
               {/* 1. Total Bills */}
               <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
-                <span className="text-[10px] lg:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Total Monthly Bills</span>
+                <span className="text-[11px] lg:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Total Monthly Bills</span>
                 <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                   {formatPHP(Math.abs(totalExpenses))}
                 </div>
-                <span className="text-[9.5px] lg:text-xs text-slate-500 dark:text-slate-400 block truncate">
+                <span className="text-[11px] lg:text-xs text-slate-500 dark:text-slate-400 block truncate">
                   House, utilities, loans & Lazada
                 </span>
               </div>
 
               {/* 2. Metrobank Withdrawn Cash */}
               <div className="bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] lg:text-xs font-semibold text-blue-900 dark:text-blue-200 uppercase tracking-wide">Metrobank</span>
-                  <span className="text-[9px] lg:text-[11px] bg-blue-100 dark:bg-blue-900/70 text-blue-800 dark:text-blue-200 px-1.5 py-0.2 rounded font-bold">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] lg:text-xs font-semibold text-blue-900 dark:text-blue-200 uppercase tracking-wide">Metrobank</span>
+                  <span className="text-[11px] bg-blue-100 dark:bg-blue-900/70 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-bold shrink-0">
                     ATM Cash
                   </span>
                 </div>
                 <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-blue-700 dark:text-blue-300 tabular-nums">
                   {formatPHP(plannedMetrobank)}
                 </div>
-                <span className="text-[9.5px] lg:text-xs text-blue-700 dark:text-blue-300/80 block truncate">
+                <span className="text-[11px] lg:text-xs text-blue-700 dark:text-blue-300/80 block truncate">
                   Withdrawn cash for physical bills
                 </span>
               </div>
 
               {/* 3. QR PH Payment */}
               <div className="bg-purple-50/60 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] lg:text-xs font-semibold text-purple-900 dark:text-purple-200 uppercase tracking-wide">QR PH</span>
-                  <span className="text-[9px] lg:text-[11px] bg-purple-100 dark:bg-purple-900/70 text-purple-800 dark:text-purple-200 px-1.5 py-0.2 rounded font-bold">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] lg:text-xs font-semibold text-purple-900 dark:text-purple-200 uppercase tracking-wide">QR PH</span>
+                  <span className="text-[11px] bg-purple-100 dark:bg-purple-900/70 text-purple-800 dark:text-purple-200 px-1.5 py-0.5 rounded font-bold shrink-0">
                     Payment
                   </span>
                 </div>
                 <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-purple-700 dark:text-purple-300 tabular-nums">
                   {formatPHP(plannedQrPh)}
                 </div>
-                <span className="text-[9.5px] lg:text-xs text-purple-700 dark:text-purple-300/80 block truncate">
+                <span className="text-[11px] lg:text-xs text-purple-700 dark:text-purple-300/80 block truncate">
                   Digital payment for Lazada bill
                 </span>
               </div>
 
               {/* 4. Gov MP2 */}
-              <div className="bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] lg:text-xs font-semibold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">Gov (MP2)</span>
-                  <span className="text-[9px] lg:text-[11px] bg-emerald-200 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200 px-1.5 py-0.2 rounded font-bold">
-                    Sovereign
+              <div className="bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] lg:text-xs font-semibold text-amber-900 dark:text-amber-200 uppercase tracking-wide">Pag-IBIG MP2</span>
+                  <span className="text-[11px] bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded font-bold shrink-0">
+                    Locked
                   </span>
                 </div>
-                <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-emerald-950 dark:text-emerald-300 tabular-nums">
+                <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-amber-950 dark:text-amber-300 tabular-nums">
                   {formatPHP(Math.abs(governmentSavings))}
                 </div>
-                <span className="text-[9.5px] lg:text-xs text-emerald-700 dark:text-emerald-300/80 block truncate">
-                  Pag-IBIG MP2 · {govSavingsRate}% of salary
+                <span className="text-[11px] lg:text-xs text-amber-700 dark:text-amber-300/80 block truncate">
+                  Non-withdrawable · {govSavingsRate}% of salary
                 </span>
               </div>
 
-              {/* 5. Personal Savings */}
-              <div className="bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1 col-span-2 sm:col-span-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] lg:text-xs font-semibold text-indigo-900 dark:text-indigo-200 uppercase tracking-wide">Personal Savings</span>
-                  <span className="text-[9px] lg:text-[11px] bg-indigo-200 dark:bg-indigo-900/70 text-indigo-900 dark:text-indigo-200 px-1.5 py-0.2 rounded font-bold">
-                    GoTyme+Bal
+              {/* 5. GoTyme (Withdrawable) */}
+              <div className="bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1 col-span-2 sm:col-span-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] lg:text-xs font-semibold text-teal-900 dark:text-teal-200 uppercase tracking-wide">GoTyme Bank</span>
+                  <span className="text-[11px] bg-teal-200 dark:bg-teal-900/70 text-teal-900 dark:text-teal-200 px-1.5 py-0.5 rounded font-bold shrink-0">
+                    Withdrawable
                   </span>
                 </div>
-                <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-indigo-950 dark:text-indigo-300 tabular-nums">
-                  {formatPHP(personalSavings)}
+                <div className="font-mono text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-teal-950 dark:text-teal-300 tabular-nums">
+                  {formatPHP(gotymeVal)}
                 </div>
-                <span className="text-[9.5px] lg:text-xs text-indigo-700 dark:text-indigo-300/80 block truncate">
-                  GoTyme ({formatPHP(gotymeVal)}) + Bal ({formatPHP(balanceVal)})
+                <span className="text-[11px] lg:text-xs text-teal-700 dark:text-teal-300/80 block truncate">
+                  Liquid reserve · Balance: {formatPHP(balanceVal)}
                 </span>
               </div>
             </div>
@@ -437,25 +435,25 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   title={`Bills: ${formatPHP(Math.abs(totalExpenses))}`}
                 />
                 <div
-                  className="h-full bg-teal-600 transition-all duration-300"
+                  className="h-full bg-amber-500 transition-all duration-300"
                   style={{ width: `${salaryVal > 0 ? Math.min(100, (Math.abs(governmentSavings) / salaryVal) * 100) : 0}%` }}
-                  title={`Gov MP2: ${formatPHP(Math.abs(governmentSavings))}`}
+                  title={`MP2 (Locked): ${formatPHP(Math.abs(governmentSavings))}`}
                 />
                 <div
-                  className="h-full bg-indigo-600 transition-all duration-300"
-                  style={{ width: `${salaryVal > 0 ? Math.min(100, (personalSavings / salaryVal) * 100) : 0}%` }}
-                  title={`Personal Savings: ${formatPHP(personalSavings)}`}
+                  className="h-full bg-teal-500 transition-all duration-300"
+                  style={{ width: `${salaryVal > 0 ? Math.min(100, (gotymeVal / salaryVal) * 100) : 0}%` }}
+                  title={`GoTyme (Withdrawable): ${formatPHP(gotymeVal)}`}
                 />
                 <div
                   className="h-full bg-emerald-500 transition-all duration-300"
                   style={{ width: `${salaryVal > 0 ? Math.max(0, (balanceVal / salaryVal) * 100) : 0}%` }}
-                  title={`Ending Surplus: ${formatPHP(balanceVal)}`}
+                  title={`Ending Balance: ${formatPHP(balanceVal)}`}
                 />
               </div>
 
               {/* Legend Chips for Distribution */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 lg:gap-3 text-[10.5px] lg:text-xs xl:text-sm font-mono">
-                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 lg:gap-3 text-xs lg:text-[13px] xl:text-sm font-mono">
+                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
                     <span className="text-slate-600 dark:text-slate-300 font-sans truncate">Bills & Loans:</span>
@@ -464,26 +462,26 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     {salaryVal > 0 ? Math.round((Math.abs(totalExpenses) / salaryVal) * 100) : 0}%
                   </span>
                 </div>
-                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
-                    <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">Gov MP2:</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">MP2 (Locked):</span>
                   </div>
-                  <span className="font-bold text-teal-700 dark:text-teal-400 shrink-0">{govSavingsRate}%</span>
+                  <span className="font-bold text-amber-700 dark:text-amber-400 shrink-0">{govSavingsRate}%</span>
                 </div>
-                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">Personal:</span>
+                    <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">GoTyme:</span>
                   </div>
-                  <span className="font-bold text-indigo-700 dark:text-indigo-400 shrink-0">
-                    {salaryVal > 0 ? Math.round((personalSavings / salaryVal) * 100) : 0}%
+                  <span className="font-bold text-teal-700 dark:text-teal-400 shrink-0">
+                    {gotymeRate}%
                   </span>
                 </div>
-                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">Surplus:</span>
+                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">Balance:</span>
                   </div>
                   <span className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{formatPHP(balanceVal)}</span>
                 </div>
@@ -493,24 +491,24 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             {/* Key Figures Strip */}
             <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-4 grid grid-cols-2 sm:grid-cols-4 gap-2 lg:gap-4 font-mono text-xs lg:text-sm shrink-0">
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px] lg:text-xs">Gross Salary:</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">Gross Salary:</span>
                 <span className="font-bold text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm lg:text-base">{formatPHP(salaryVal)}</span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px] lg:text-xs">Total Savings Rate:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm lg:text-base">{savingsRate}% of salary</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">MP2 / GoTyme Rate:</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm lg:text-base">{govSavingsRate}% / {gotymeRate}%</span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px] lg:text-xs">Settled Bills (OK):</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">Settled Bills:</span>
                 <span className="font-bold text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm lg:text-base">{settlementPercent}% ({settledCount} items)</span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px] lg:text-xs">Deferred to Next:</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">Deferred Bills:</span>
                 <span className="font-bold text-amber-700 dark:text-amber-400 text-xs sm:text-sm lg:text-base">{formatPHP(nextPayrollAmount)} ({nextPayrollCount})</span>
               </div>
             </div>
 
-            <div className="text-[10px] lg:text-xs xl:text-sm text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1 border-t border-slate-100 dark:border-slate-800">
+            <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800">
               Reconciled across all workbook sheets for Year {monthData.year || 2026} with zero discrepancies.
             </div>
           </div>
@@ -519,41 +517,41 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
           {/* CARD 1 (PAGE 2): 15-DAY CUTOFFS CONTRIBUTION - FITTED WHOLE, NO SCROLLBAR */}
           {currentCardIndex === 1 && (
             <div className="flex-1 flex flex-col justify-between min-h-0 overflow-y-auto overflow-x-hidden pr-0.5 space-y-1.5 sm:space-y-2 animate-in fade-in duration-150 w-full">
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-1 lg:pb-2 flex items-center justify-between shrink-0">
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5 lg:pb-2 flex items-center justify-between shrink-0">
                 <div>
-                  <h3 className="text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                  <h3 className="text-sm sm:text-base lg:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
                     {tableTitle} - 15-Day Cutoffs Contribution
                   </h3>
-                  <p className="text-[10px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400">
-                    Table title on both sheets: <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded font-mono font-bold text-slate-800 dark:text-slate-200">{tableTitle}</code>
+                  <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
+                    Table title on both sheets: <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono font-bold text-slate-800 dark:text-slate-200">{tableTitle}</code>
                   </p>
                 </div>
-                <span className="text-[10px] lg:text-xs text-slate-500 dark:text-slate-400 font-mono">{sheetCount} Sheets</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{sheetCount} Sheets</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3 my-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 lg:gap-3 my-auto">
                 {cutoffSummaries.map((cutoff, idx) => (
                   <div
                     key={cutoff.id}
                     onClick={() => onSelectMonth?.(cutoff.id)}
-                    className="bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100/90 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 transition-all cursor-pointer group space-y-1 lg:space-y-1.5"
+                    className="bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100/90 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-3.5 transition-all cursor-pointer group space-y-1.5"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] lg:text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 group-hover:bg-slate-900 dark:group-hover:bg-emerald-600 group-hover:text-white px-1.5 py-0.2 rounded transition-colors">
+                        <span className="text-[11px] lg:text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 group-hover:bg-slate-900 dark:group-hover:bg-emerald-600 group-hover:text-white px-2 py-0.5 rounded transition-colors">
                           Sheet {idx + 1}
                         </span>
-                        <span className="text-xs lg:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{cutoff.name}</span>
+                        <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{cutoff.name}</span>
                       </div>
                       <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-100 transition-colors" />
                     </div>
 
-                    <div className="space-y-0.5 lg:space-y-1 text-[11px] lg:text-xs xl:text-sm font-mono">
+                    <div className="space-y-1 text-xs sm:text-[13px] lg:text-sm font-mono">
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
                         <span>Period:</span>
                         <span className="text-slate-800 dark:text-slate-200 font-medium">{cutoff.cutoffLabel}</span>
                       </div>
-                      <div className="flex justify-between text-slate-600 dark:text-slate-400 pt-0.5 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-700">
                         <span>Expenses:</span>
                         <span className="font-bold text-rose-700 dark:text-rose-400">{formatPHP(cutoff.expenses)}</span>
                       </div>
@@ -562,29 +560,35 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                         <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatPHP(cutoff.salary)}</span>
                       </div>
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>Gov (MP2):</span>
-                        <span className="font-bold text-teal-700 dark:text-teal-400">{formatPHP(cutoff.govSavings)}</span>
+                        <span>MP2 (Locked):</span>
+                        <span className="font-bold text-amber-700 dark:text-amber-400">{formatPHP(cutoff.govSavings)}</span>
                       </div>
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>Personal Savings:</span>
-                        <span className="font-bold text-indigo-700 dark:text-indigo-400">{formatPHP(cutoff.personalSavings)}</span>
+                        <span>GoTyme (Withdrawable):</span>
+                        <span className="font-bold text-teal-700 dark:text-teal-400">
+                          {formatPHP(Math.max(0, cutoff.personalSavings - cutoff.endingBalance))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>Ending Balance:</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">{formatPHP(cutoff.endingBalance)}</span>
                       </div>
                     </div>
                   </div>
                 ))}
 
                 {/* Full Month Total Column */}
-                <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1 lg:space-y-1.5">
+                <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2.5 sm:p-3 lg:p-3.5 space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] lg:text-xs font-bold bg-emerald-600 text-white px-1.5 py-0.2 rounded uppercase">
+                    <span className="text-[11px] lg:text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded uppercase">
                       Full Month Total
                     </span>
-                    <span className="text-[11px] lg:text-xs font-extrabold text-emerald-950 dark:text-emerald-300 font-mono">
+                    <span className="text-xs font-extrabold text-emerald-950 dark:text-emerald-300 font-mono">
                       {sheetCount} Sheets
                     </span>
                   </div>
 
-                  <div className="space-y-0.5 lg:space-y-1 text-[11px] lg:text-xs xl:text-sm font-mono pt-0.5">
+                  <div className="space-y-1 text-xs sm:text-[13px] lg:text-sm font-mono pt-0.5">
                     <div className="flex justify-between">
                       <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Total Expenses:</span>
                       <span className="font-black text-rose-800 dark:text-rose-400">{formatPHP(Math.abs(totalExpenses))}</span>
@@ -594,22 +598,22 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       <span className="font-black text-emerald-800 dark:text-emerald-400">{formatPHP(salaryVal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Gov (MP2):</span>
-                      <span className="font-black text-teal-800 dark:text-teal-400">{formatPHP(Math.abs(governmentSavings))}</span>
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">MP2 (Locked):</span>
+                      <span className="font-black text-amber-800 dark:text-amber-400">{formatPHP(Math.abs(governmentSavings))}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Personal Savings:</span>
-                      <span className="font-black text-indigo-800 dark:text-indigo-400">{formatPHP(personalSavings)}</span>
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">GoTyme (Withdrawable):</span>
+                      <span className="font-black text-teal-800 dark:text-teal-400">{formatPHP(gotymeVal)}</span>
                     </div>
-                    <div className="flex justify-between pt-0.5 border-t border-emerald-200 dark:border-emerald-800">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Total Stash:</span>
-                      <span className="font-black text-emerald-950 dark:text-emerald-300 text-xs sm:text-sm lg:text-base">{formatPHP(totalCombinedSavings)}</span>
+                    <div className="flex justify-between pt-1 border-t border-emerald-200 dark:border-emerald-800">
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Ending Balance:</span>
+                      <span className="font-black text-emerald-950 dark:text-emerald-300 text-xs sm:text-sm lg:text-base">{formatPHP(balanceVal)}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="text-[10px] lg:text-xs xl:text-sm text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800">
                 15th Kinsenas covers regular mid-month bills; 30th Katapusan handles end-of-month allocations and savings.
               </div>
             </div>
@@ -626,14 +630,14 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             >
               <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5 lg:pb-2 flex items-center justify-between shrink-0">
                 <div>
-                  <h3 className="text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                  <h3 className="text-sm sm:text-base lg:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
                     {tableTitle} - Expense Category Share
                   </h3>
-                  <p className="text-[10px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400">
+                  <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
                     Category percentage breakdown (100% = {formatPHP(totalExpenses)}) · Lazada is the bill; QR PH is its payment channel
                   </p>
                 </div>
-                <span className="font-mono text-[11px] lg:text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
                   {donutSlices.length} Categories
                 </span>
               </div>
@@ -654,9 +658,9 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 // Adaptive padding and typography so all items fit cleanly without vertical scrollbar
                 const itemPadClass =
                   numCategories > 10
-                    ? 'py-0.5 px-2 lg:py-1 lg:px-2.5 text-[10px] lg:text-xs'
+                    ? 'py-1 px-2.5 text-[11px] lg:text-xs'
                     : numCategories > 6
-                    ? 'py-1 px-2 lg:py-1.5 lg:px-3 text-[10.5px] lg:text-xs xl:text-sm'
+                    ? 'py-1.5 px-2.5 lg:px-3 text-xs lg:text-[13px]'
                     : 'py-1.5 px-2.5 lg:py-2 lg:px-3 text-xs lg:text-sm';
 
                 const donutSizeClass =
@@ -704,13 +708,13 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                             <span className="font-mono text-base sm:text-lg lg:text-xl font-black text-emerald-700 dark:text-emerald-400 leading-tight my-0.5">
                               {activeSlice.percentage}%
                             </span>
-                            <span className="font-mono text-[11px] sm:text-xs lg:text-sm font-bold text-slate-700 dark:text-slate-300">
+                            <span className="font-mono text-xs lg:text-sm font-bold text-slate-700 dark:text-slate-300">
                               {formatPHP(activeSlice.amount)}
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center max-w-[110px] sm:max-w-[125px] lg:max-w-[145px] px-1">
-                            <span className="text-[9.5px] lg:text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Top Bill</span>
+                            <span className="text-[11px] lg:text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Top Bill</span>
                             <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight text-center line-clamp-2 mt-0.5">
                               {donutSlices[0]?.label || 'None'}
                             </span>
@@ -757,10 +761,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                               <span
                                 className={`truncate ${
                                   numCategories > 10
-                                    ? 'text-[10px] lg:text-xs'
+                                    ? 'text-[11px] lg:text-xs'
                                     : numCategories > 6
-                                    ? 'text-[10.5px] lg:text-xs xl:text-sm'
-                                    : 'text-[11px] lg:text-sm'
+                                    ? 'text-xs lg:text-[13px]'
+                                    : 'text-xs lg:text-sm'
                                 } ${isSelected ? 'text-white font-bold' : 'text-slate-800 dark:text-slate-200'}`}
                               >
                                 {slice.label}
@@ -790,7 +794,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 );
               })()}
 
-              <div className="text-[10px] lg:text-xs xl:text-sm text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1 border-t border-slate-100 dark:border-slate-800 select-none">
+              <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800 select-none">
                 Tap any slice or category to highlight · Tap outside to reset
               </div>
             </div>
@@ -883,7 +887,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
                       <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-semibold text-xs lg:text-sm mb-1">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        <span>OK ({settledCount})</span>
+                        <span>Settled ({settledCount})</span>
                       </div>
                       <div className="font-mono font-bold text-emerald-900 dark:text-emerald-200 text-sm lg:text-base tabular-nums">
                         {formatPHP(settledAmount)}
@@ -893,7 +897,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
                       <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-semibold text-xs lg:text-sm mb-1">
                         <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                        <span>Next ({nextPayrollCount})</span>
+                        <span>Deferred ({nextPayrollCount})</span>
                       </div>
                       <div className="font-mono font-bold text-amber-900 dark:text-amber-200 text-sm lg:text-base tabular-nums">
                         {formatPHP(nextPayrollAmount)}
@@ -909,105 +913,109 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             </div>
           )}
 
-          {/* CARD 4 (PAGE 5): SAVINGS PORTFOLIO (GOVERNMENT VS PERSONAL) - FITTED WHOLE, NO SCROLLBAR */}
+          {/* CARD 4 (PAGE 5): SAVINGS ALLOCATION (LOCKED MP2 VS WITHDRAWABLE GOTYME) - NO COMBINING */}
           {currentCardIndex === 4 && (
             <div className="flex-1 flex flex-col justify-between min-h-0 overflow-y-auto overflow-x-hidden pr-0.5 animate-in fade-in duration-150 w-full">
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-1 lg:pb-2 flex items-center justify-between shrink-0">
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5 lg:pb-2 flex items-center justify-between shrink-0">
                 <div>
-                  <h3 className="text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-                    {tableTitle} - Savings Portfolio: Government vs Personal
+                  <h3 className="text-sm sm:text-base lg:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                    {tableTitle} - Savings Reserves: Locked MP2 vs Withdrawable GoTyme
                   </h3>
-                  <p className="text-[10px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400">
-                    Sovereign guaranteed capital fund vs liquid digital banking yields
+                  <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
+                    Tracked separately — MP2 is long-term locked while GoTyme is withdrawable anytime
                   </p>
                 </div>
-                <span className="font-mono text-[11px] lg:text-xs font-bold text-emerald-950 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/70 border border-transparent dark:border-emerald-800 px-2 py-0.5 rounded">
-                  Total: {formatPHP(totalCombinedSavings)}
+                <span className="font-mono text-xs font-bold text-emerald-950 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/70 border border-transparent dark:border-emerald-800 px-2.5 py-0.5 rounded-md">
+                  Balance: {formatPHP(balanceVal)}
                 </span>
               </div>
 
-              <div className="my-auto py-1 sm:py-1.5 space-y-2 sm:space-y-2.5 lg:space-y-4">
-                {/* Distribution Bar */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] lg:text-xs xl:text-sm font-semibold">
-                    <span className="text-emerald-800 dark:text-emerald-400">
-                      Government (Pag-IBIG MP2): {totalCombinedSavings > 0 ? Math.round((governmentSavings / totalCombinedSavings) * 100) : 0}%
-                    </span>
-                    <span className="text-indigo-800 dark:text-indigo-400">
-                      Personal (GoTyme + Bal): {totalCombinedSavings > 0 ? Math.round((personalSavings / totalCombinedSavings) * 100) : 0}%
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 lg:h-3 bg-slate-100 dark:bg-slate-950 rounded-full overflow-hidden flex shadow-inner">
-                    <div
-                      className="h-full bg-emerald-600 transition-all duration-300"
-                      style={{
-                        width: `${totalCombinedSavings > 0 ? (governmentSavings / totalCombinedSavings) * 100 : 50}%`,
-                      }}
-                    />
-                    <div
-                      className="h-full bg-indigo-600 transition-all duration-300"
-                      style={{
-                        width: `${totalCombinedSavings > 0 ? (personalSavings / totalCombinedSavings) * 100 : 50}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Side-by-Side Savings Breakdown Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5 lg:gap-4">
-                  {/* Government Savings */}
-                  <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl p-2.5 sm:p-3 lg:p-4 space-y-1 lg:space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <Landmark className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-emerald-700 dark:text-emerald-400" />
-                        <span className="text-xs lg:text-sm font-bold text-emerald-950 dark:text-emerald-200 uppercase">
-                          Government Savings
+              {(() => {
+                const mp2Abs = Math.abs(governmentSavings);
+                const savingsBase = mp2Abs + Math.max(0, gotymeVal);
+                const mp2Pct = savingsBase > 0 ? Math.round((mp2Abs / savingsBase) * 100) : 50;
+                const gotymePct = savingsBase > 0 ? 100 - mp2Pct : 50;
+                return (
+                  <div className="my-auto py-1 sm:py-1.5 space-y-2.5 lg:space-y-4">
+                    {/* Comparison Ratio Bar (MP2 vs GoTyme Share) */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs lg:text-sm font-semibold">
+                        <span className="text-amber-700 dark:text-amber-400">
+                          Pag-IBIG MP2 (Locked): {mp2Pct}%
+                        </span>
+                        <span className="text-teal-700 dark:text-teal-400">
+                          GoTyme (Withdrawable): {gotymePct}%
                         </span>
                       </div>
-                      <span className="text-[9px] lg:text-xs bg-emerald-200 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200 font-bold px-2 py-0.5 rounded-full">
-                        Pag-IBIG MP2
-                      </span>
+                      <div className="w-full h-2.5 lg:h-3 bg-slate-100 dark:bg-slate-950 rounded-full overflow-hidden flex shadow-inner">
+                        <div
+                          className="h-full bg-amber-500 transition-all duration-300"
+                          style={{ width: `${mp2Pct}%` }}
+                        />
+                        <div
+                          className="h-full bg-teal-500 transition-all duration-300"
+                          style={{ width: `${gotymePct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="font-mono text-base sm:text-lg lg:text-2xl font-black text-emerald-950 dark:text-emerald-300 tabular-nums">
-                      {formatPHP(Math.abs(governmentSavings))}
-                    </div>
-                    <div className="text-[10px] lg:text-xs xl:text-sm text-emerald-800 dark:text-emerald-200/90 bg-white/70 dark:bg-slate-900/70 p-2 lg:p-2.5 rounded-lg border border-emerald-200/60 dark:border-emerald-800/60 leading-relaxed">
-                      • 100% Tax-free annual compounded dividend yield (averages 6.5% – 7.5% p.a.). Sovereign guaranteed capital.
+
+                    {/* Side-by-Side Savings Cards (Strictly Separate) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-4">
+                      {/* Locked Government Savings (MP2) */}
+                      <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-3 lg:p-4 space-y-1.5 lg:space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <Landmark className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                            <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-amber-950 dark:text-amber-200 uppercase">
+                              Pag-IBIG MP2
+                            </span>
+                          </div>
+                          <span className="text-[11px] lg:text-xs bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 font-bold px-2 py-0.5 rounded-full">
+                            Non-Withdrawable · Locked
+                          </span>
+                        </div>
+                        <div className="font-mono text-base sm:text-lg lg:text-2xl font-black text-amber-950 dark:text-amber-300 tabular-nums">
+                          {formatPHP(mp2Abs)}
+                        </div>
+                        <div className="text-xs lg:text-sm text-amber-900 dark:text-amber-200/90 bg-white/70 dark:bg-slate-900/70 p-2 lg:p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-800/60 leading-relaxed">
+                          • 5-year maturity sovereign dividend reserve ({govSavingsRate}% of salary). Excluded from liquid cash reserves.
+                        </div>
+                      </div>
+
+                      {/* Withdrawable Personal Savings (GoTyme) */}
+                      <div className="bg-teal-50/80 dark:bg-teal-950/40 border border-teal-300 dark:border-teal-800 rounded-xl p-3 lg:p-4 space-y-1.5 lg:space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <Wallet className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+                            <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-teal-950 dark:text-teal-200 uppercase">
+                              GoTyme Savings
+                            </span>
+                          </div>
+                          <span className="text-[11px] lg:text-xs bg-teal-200 dark:bg-teal-900/70 text-teal-900 dark:text-teal-200 font-bold px-2 py-0.5 rounded-full">
+                            Withdrawable Anytime
+                          </span>
+                        </div>
+                        <div className="font-mono text-base sm:text-lg lg:text-2xl font-black text-teal-950 dark:text-teal-300 tabular-nums">
+                          {formatPHP(gotymeVal)}
+                        </div>
+                        <div className="text-xs lg:text-sm text-teal-900 dark:text-teal-200 bg-white/70 dark:bg-slate-900/70 p-2 lg:p-2.5 rounded-lg border border-teal-200/60 dark:border-teal-800/60 font-mono space-y-0.5">
+                          <div className="flex justify-between">
+                            <span>• GoTyme Withdrawable:</span>
+                            <span className="font-bold">{formatPHP(gotymeVal)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>• Ending Carryover Balance:</span>
+                            <span className="font-bold">{formatPHP(balanceVal)}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                );
+              })()}
 
-                  {/* Personal Savings */}
-                  <div className="bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-300 dark:border-indigo-800 rounded-xl p-2.5 sm:p-3 lg:p-4 space-y-1 lg:space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <Wallet className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-indigo-700 dark:text-indigo-400" />
-                        <span className="text-xs lg:text-sm font-bold text-indigo-950 dark:text-indigo-200 uppercase">
-                          Personal Savings
-                        </span>
-                      </div>
-                      <span className="text-[9px] lg:text-xs bg-indigo-200 dark:bg-indigo-900/70 text-indigo-900 dark:text-indigo-200 font-bold px-2 py-0.5 rounded-full">
-                        GoTyme + Balance
-                      </span>
-                    </div>
-                    <div className="font-mono text-base sm:text-lg lg:text-2xl font-black text-indigo-950 dark:text-indigo-300 tabular-nums">
-                      {formatPHP(personalSavings)}
-                    </div>
-                    <div className="text-[10px] lg:text-xs xl:text-sm text-indigo-800 dark:text-indigo-200 bg-white/70 dark:bg-slate-900/70 p-2 lg:p-2.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800/60 font-mono space-y-0.5">
-                      <div className="flex justify-between">
-                        <span>• GoTyme Go Save:</span>
-                        <span className="font-bold">{formatPHP(gotymeVal)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>• Ending Balance:</span>
-                        <span className="font-bold">{formatPHP(balanceVal)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-[10px] lg:text-xs xl:text-sm text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1 border-t border-slate-100 dark:border-slate-800">
-                Allocated capital compounds over time to build high-yield liquidity and long-term emergency reserves.
+              <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                Locked MP2 maturity savings and withdrawable GoTyme reserves remain strictly separated.
               </div>
             </div>
           )}
@@ -1020,92 +1028,101 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   <h3 className="text-sm sm:text-base lg:text-lg xl:text-xl font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
                     {tableTitle} - Monthly Cash Flow Waterfall
                   </h3>
-                  <p className="text-[11px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400">
-                    Step-by-step capital flow from Total Annual Salary to Personal Savings
+                  <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
+                    Step-by-step capital flow from Gross Salary to Ending Balance
                   </p>
                 </div>
-                <span className="font-mono text-xs lg:text-sm font-bold text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-950/70 border border-transparent dark:border-indigo-800 px-2.5 py-0.5 rounded-full">
-                  Personal Savings: {formatPHP(personalSavings)}
+                <span className="font-mono text-xs lg:text-sm font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/70 border border-transparent dark:border-emerald-800 px-2.5 py-0.5 rounded-full">
+                  Ending Balance: {formatPHP(balanceVal)}
                 </span>
               </div>
 
-              <div className="my-auto py-1 space-y-2 lg:space-y-3">
-                {/* Top Flow Stages (4 columns, QR PH removed) */}
+              <div className="my-auto py-1 space-y-2.5 lg:space-y-3">
+                {/* Top Flow Stages */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3">
-                  {/* 1. Total Annual Salary */}
-                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2 sm:p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[9.5px] lg:text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">1. Total Annual Salary</span>
-                    <div className="font-mono text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-emerald-950 dark:text-emerald-200 my-0.5 tabular-nums">
+                  {/* 1. Gross Salary */}
+                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
+                    <span className="text-[11px] lg:text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">1. Gross Salary</span>
+                    <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-emerald-950 dark:text-emerald-200 my-0.5 tabular-nums">
                       {formatPHP(salaryVal)}
                     </div>
-                    <span className="text-[9px] lg:text-xs text-emerald-700 dark:text-emerald-400/80">Combined payroll sheets</span>
+                    <span className="text-[11px] lg:text-xs text-emerald-700 dark:text-emerald-400/80">Combined payroll sheets</span>
                   </div>
 
-                  {/* 2. Total Bills (Never negative) */}
-                  <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-2 sm:p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[9.5px] lg:text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wide">2. Total Bills</span>
-                    <div className="font-mono text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-rose-950 dark:text-rose-200 my-0.5 tabular-nums">
+                  {/* 2. Total Bills */}
+                  <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
+                    <span className="text-[11px] lg:text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wide">2. Total Bills</span>
+                    <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-rose-950 dark:text-rose-200 my-0.5 tabular-nums">
                       {formatPHP(Math.abs(totalExpenses))}
                     </div>
-                    <span className="text-[9px] lg:text-xs text-rose-700 dark:text-rose-400/80">Rent, utilities, food & loans</span>
+                    <span className="text-[11px] lg:text-xs text-rose-700 dark:text-rose-400/80">Rent, utilities, food & loans</span>
                   </div>
 
                   {/* 3. Metrobank Cash */}
-                  <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl p-2 sm:p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[9.5px] lg:text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wide">3. Metrobank Cash</span>
-                    <div className="font-mono text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-blue-950 dark:text-blue-200 my-0.5 tabular-nums">
+                  <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
+                    <span className="text-[11px] lg:text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wide">3. Metrobank Cash</span>
+                    <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-blue-950 dark:text-blue-200 my-0.5 tabular-nums">
                       {formatPHP(plannedMetrobank)}
                     </div>
-                    <span className="text-[9px] lg:text-xs text-blue-700 dark:text-blue-400/80">Withdrawn ATM Cash for bills</span>
+                    <span className="text-[11px] lg:text-xs text-blue-700 dark:text-blue-400/80">Withdrawn ATM Cash for bills</span>
                   </div>
 
-                  {/* 4. Gov: MP2 (Never negative) */}
-                  <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl p-2 sm:p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[9.5px] lg:text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wide">4. Gov: MP2</span>
-                    <div className="font-mono text-xs sm:text-sm lg:text-base xl:text-lg font-extrabold text-emerald-950 dark:text-emerald-200 my-0.5 tabular-nums">
+                  {/* 4. Pag-IBIG MP2 (Locked) */}
+                  <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
+                    <span className="text-[11px] lg:text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wide">4. MP2 (Locked)</span>
+                    <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-amber-950 dark:text-amber-200 my-0.5 tabular-nums">
                       {formatPHP(Math.abs(governmentSavings))}
                     </div>
-                    <span className="text-[9px] lg:text-xs text-emerald-700 dark:text-emerald-400/80">Pag-IBIG MP2 Sovereign Stash</span>
+                    <span className="text-[11px] lg:text-xs text-amber-700 dark:text-amber-400/80">Non-withdrawable 5-yr reserve</span>
                   </div>
                 </div>
 
-                {/* 5. Personal Savings Card - Fitted Whole Without Cropping */}
-                <div className="bg-indigo-50/85 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl p-2.5 sm:p-3 lg:p-4 space-y-1 sm:space-y-1.5 lg:space-y-2 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Wallet className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
-                      <span className="text-xs lg:text-sm font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wide">
-                        5. Personal Savings
+                {/* Stage 5 & 6 Split Cards: GoTyme (Withdrawable) & Ending Balance */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-3">
+                  <div className="bg-teal-50/85 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl p-3 lg:p-4 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Wallet className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+                        <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-teal-950 dark:text-teal-200 uppercase tracking-wide">
+                          5. GoTyme Savings
+                        </span>
+                      </div>
+                      <span className="text-[11px] lg:text-xs bg-teal-200 dark:bg-teal-900/70 text-teal-900 dark:text-teal-200 font-bold px-2 py-0.5 rounded-full">
+                        Withdrawable
                       </span>
                     </div>
-                    <span className="text-[9px] sm:text-[10px] lg:text-xs bg-indigo-200 dark:bg-indigo-900/70 text-indigo-900 dark:text-indigo-200 font-bold px-2 py-0.5 rounded-full">
-                      GoTyme + Ending Balance
-                    </span>
+                    <div className="font-mono text-lg sm:text-xl lg:text-2xl font-black text-teal-950 dark:text-teal-300 tabular-nums">
+                      {formatPHP(gotymeVal)}
+                    </div>
+                    <div className="text-xs text-teal-700/90 dark:text-teal-300/80 font-sans">
+                      Accessible personal savings separate from locked MP2.
+                    </div>
                   </div>
 
-                  <div className="font-mono text-lg sm:text-xl lg:text-2xl font-black text-indigo-950 dark:text-indigo-300 tabular-nums">
-                    {formatPHP(personalSavings)}
-                  </div>
-
-                  <div className="text-[10.5px] sm:text-[11px] lg:text-xs xl:text-sm text-indigo-900 dark:text-indigo-200 bg-white/80 dark:bg-slate-900/75 p-2 sm:p-2.5 lg:p-3 rounded-lg border border-indigo-200/70 dark:border-indigo-800/60 font-mono space-y-0.5 lg:space-y-1 shadow-2xs">
-                    <div className="flex justify-between items-center">
-                      <span className="font-sans font-medium text-slate-700 dark:text-slate-300">• GoTyme Go Save Stash:</span>
-                      <span className="font-bold text-indigo-950 dark:text-indigo-200">{formatPHP(gotymeVal)}</span>
+                  <div className="bg-emerald-50/85 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 lg:p-4 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                        <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-emerald-950 dark:text-emerald-200 uppercase tracking-wide">
+                          6. Ending Balance
+                        </span>
+                      </div>
+                      <span className="text-[11px] lg:text-xs bg-emerald-200 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200 font-bold px-2 py-0.5 rounded-full">
+                        Net Surplus
+                      </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="font-sans font-medium text-slate-700 dark:text-slate-300">• Carried Liquid Ending Balance:</span>
-                      <span className="font-bold text-indigo-950 dark:text-indigo-200">{formatPHP(balanceVal)}</span>
+                    <div className="font-mono text-lg sm:text-xl lg:text-2xl font-black text-emerald-950 dark:text-emerald-300 tabular-nums">
+                      {formatPHP(balanceVal)}
                     </div>
-                    <div className="text-[10px] lg:text-xs text-indigo-700/80 dark:text-indigo-300/80 font-sans pt-0.5 border-t border-indigo-100 dark:border-indigo-800/60 flex items-center justify-between">
-                      <span>Combined Liquid Personal Savings:</span>
-                      <span className="font-bold text-indigo-950 dark:text-indigo-200 font-mono">{formatPHP(personalSavings)}</span>
+                    <div className="text-xs text-emerald-700/90 dark:text-emerald-300/80 font-sans">
+                      Formula: (Salary - Total Bills) - (MP2 + GoTyme)
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="text-[10px] lg:text-xs xl:text-sm text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1 border-t border-slate-100 dark:border-slate-800">
-                Reconciled waterfall verifies zero double-counting across banking and personal savings channels.
+              <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                Reconciled waterfall tracks locked MP2, withdrawable GoTyme, and ending balance separately.
               </div>
             </div>
           )}

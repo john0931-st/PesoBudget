@@ -14,7 +14,6 @@ import React, { useState } from 'react';
 import { X, Calendar, Copy, Sparkles, Check, DollarSign, Layers } from 'lucide-react';
 import { formatCurrency } from '../utils/currency';
 import { useCurrency } from '../hooks/useCurrency';
-import { isSharedPublicDeployment } from '../utils/storage';
 
 interface NewMonthModalProps {
   isOpen: boolean;
@@ -26,13 +25,16 @@ interface NewMonthModalProps {
   defaultBaseSalaryKinsenas?: number;
   initialYear?: number;
   availableYears?: number[];
+  deferredCount?: number;
+  deferredTotal?: number;
   onConfirm: (
     monthName: string,
     shouldCopyCurrent: boolean,
     manualSalaryMonthly?: number,
     manualSalaryKinsenas?: number,
     targetYear?: number,
-    includePreviousBalance?: boolean
+    includePreviousBalance?: boolean,
+    carryOverDeferred?: boolean
   ) => void;
 }
 
@@ -51,6 +53,8 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
   defaultBaseSalaryKinsenas = 0,
   initialYear = 2026,
   availableYears = [2024, 2025, 2026, 2027, 2028],
+  deferredCount = 0,
+  deferredTotal = 0,
   onConfirm,
 }) => {
   useCurrency();
@@ -63,22 +67,15 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
   const [copyCurrent, setCopyCurrent] = useState(false);
   // Option inside Clean Default Template: include carried previous balance or start with ₱0.00 previous balance
   const [includePreviousBalance, setIncludePreviousBalance] = useState(true);
+  // Option inside Clean Default Template: carry over Deferred (Next Payroll) bills from active sheet
+  const [carryOverDeferred, setCarryOverDeferred] = useState(deferredCount > 0);
 
   // Manual current salary inputs
-  const isPublicShared = isSharedPublicDeployment();
   const [manualSalaryKinsenas, setManualSalaryKinsenas] = useState<string>(
-    defaultBaseSalaryKinsenas > 0
-      ? defaultBaseSalaryKinsenas.toString()
-      : isPublicShared
-      ? ''
-      : '6703.08'
+    defaultBaseSalaryKinsenas > 0 ? defaultBaseSalaryKinsenas.toString() : ''
   );
   const [manualSalaryMonthly, setManualSalaryMonthly] = useState<string>(
-    defaultBaseSalaryMonthly > 0
-      ? defaultBaseSalaryMonthly.toString()
-      : isPublicShared
-      ? ''
-      : '13406.16'
+    defaultBaseSalaryMonthly > 0 ? defaultBaseSalaryMonthly.toString() : ''
   );
 
   // Sync initialYear and default salary inputs when modal opens
@@ -89,22 +86,15 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
         setIsCustomYear(false);
       }
       setIncludePreviousBalance(true);
+      setCarryOverDeferred(deferredCount > 0);
       setManualSalaryKinsenas(
-        defaultBaseSalaryKinsenas > 0
-          ? defaultBaseSalaryKinsenas.toString()
-          : isPublicShared
-          ? ''
-          : '6703.08'
+        defaultBaseSalaryKinsenas > 0 ? defaultBaseSalaryKinsenas.toString() : ''
       );
       setManualSalaryMonthly(
-        defaultBaseSalaryMonthly > 0
-          ? defaultBaseSalaryMonthly.toString()
-          : isPublicShared
-          ? ''
-          : '13406.16'
+        defaultBaseSalaryMonthly > 0 ? defaultBaseSalaryMonthly.toString() : ''
       );
     }
-  }, [initialYear, isOpen, defaultBaseSalaryKinsenas, defaultBaseSalaryMonthly, isPublicShared]);
+  }, [initialYear, isOpen, defaultBaseSalaryKinsenas, defaultBaseSalaryMonthly, deferredCount]);
 
   if (!isOpen) return null;
 
@@ -137,7 +127,8 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
       parseFloat(manualSalaryMonthly) || 0,
       parseFloat(manualSalaryKinsenas) || 0,
       parsedYear,
-      copyCurrent ? true : includePreviousBalance
+      copyCurrent ? true : includePreviousBalance,
+      copyCurrent ? false : carryOverDeferred
     );
 
     setName('');
@@ -380,6 +371,43 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                         <span className="font-mono text-[10px] opacity-90 shrink-0">{formatCurrency(0)}</span>
                       </button>
                     </div>
+
+                    {deferredCount > 0 && (
+                      <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/50 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] lg:text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                          <span>Deferred Bills From {currentMonthName}</span>
+                          <span className="font-mono">
+                            {deferredCount} item{deferredCount !== 1 ? 's' : ''} · {formatCurrency(deferredTotal)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCarryOverDeferred(true)}
+                            className={`px-2.5 py-1.5 rounded-lg border text-[11px] lg:text-xs font-bold text-left transition-all cursor-pointer flex items-center justify-between gap-1 ${
+                              carryOverDeferred
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                                : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <span className="truncate">Carry Deferred Bills</span>
+                            <span className="font-mono text-[10px] opacity-90 shrink-0">{deferredCount}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCarryOverDeferred(false)}
+                            className={`px-2.5 py-1.5 rounded-lg border text-[11px] lg:text-xs font-bold text-left transition-all cursor-pointer flex items-center justify-between gap-1 ${
+                              !carryOverDeferred
+                                ? 'bg-slate-900 dark:bg-emerald-600 text-white border-slate-900 dark:border-emerald-500 shadow-2xs'
+                                : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <span className="truncate">Leave Bills Empty</span>
+                            <span className="font-mono text-[10px] opacity-90 shrink-0">0</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -443,7 +471,7 @@ export const NewMonthModal: React.FC<NewMonthModalProps> = ({
                   step="any"
                   value={manualSalaryKinsenas}
                   onChange={(e) => setManualSalaryKinsenas(e.target.value)}
-                  placeholder={isPublicShared ? '0.00' : '6703.08'}
+                  placeholder="0.00"
                   className="w-full font-mono font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-slate-900 dark:focus:border-emerald-500 rounded px-2 py-1 text-xs lg:text-sm focus:outline-none"
                 />
               </div>
