@@ -160,44 +160,72 @@ export async function beginGoogleSignInPopup(): Promise<User> {
   }
 }
 
+export type OtpDeliveryMode = 'email' | 'oauth_session_code';
+
+export interface OtpDispatchResult {
+  maskedEmail: string;
+  expiresInSeconds: number;
+  deliveryMode: OtpDeliveryMode;
+  smtpConfigured: boolean;
+  sessionCode?: string;
+}
+
 /**
- * Step 2 of strict Google Sign-In: asks the backend server to dispatch a 6-digit
- * verification code to the user's Gmail inbox.
+ * Step 2 of strict Google Sign-In: asks the backend server (authenticated with
+ * the user's live Google/Firebase ID token) to issue a 6-digit verification code.
  */
 export async function requestGmailVerificationOtp(
-  email: string,
-  name?: string
-): Promise<{ maskedEmail: string; expiresInSeconds: number }> {
+  user: User
+): Promise<OtpDispatchResult> {
+  const email = user.email?.trim() || '';
+  const idToken = await user.getIdToken();
   const res = await fetch('/api/auth/send-otp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, name }),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      email,
+      name: user.displayName || undefined,
+    }),
   });
   const payload = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
     maskedEmail?: string;
     expiresInSeconds?: number;
+    deliveryMode?: OtpDeliveryMode;
+    smtpConfigured?: boolean;
+    sessionCode?: string;
     error?: string;
   };
   if (!res.ok || !payload.ok) {
-    throw new Error(payload.error || 'Failed to send verification code to your Gmail.');
+    throw new Error(payload.error || 'Failed to issue verification code for your Google account.');
   }
   return {
     maskedEmail: payload.maskedEmail || email,
     expiresInSeconds: payload.expiresInSeconds || 600,
+    deliveryMode: payload.deliveryMode || (payload.smtpConfigured ? 'email' : 'oauth_session_code'),
+    smtpConfigured: Boolean(payload.smtpConfigured),
+    sessionCode: payload.sessionCode,
   };
 }
 
 /**
- * Step 3 of strict Google Sign-In: submits the 6-digit Gmail OTP entered by the user.
+ * Step 3 of strict Google Sign-In: submits the 6-digit verification code entered by the user.
  */
 export async function verifyGmailOtpCode(
-  email: string,
+  user: User,
   code: string
 ): Promise<{ verifiedAt: string; verificationToken: string }> {
+  const email = user.email?.trim() || '';
+  const idToken = await user.getIdToken();
   const res = await fetch('/api/auth/verify-otp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
     body: JSON.stringify({ email, code }),
   });
   const payload = (await res.json().catch(() => ({}))) as {

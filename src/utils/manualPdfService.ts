@@ -1171,7 +1171,7 @@ export function downloadUserManualPdf(): {
       feature: 'Strict Gmail OTP Cloud Sync',
       location: 'Settings -> Sign in with Google',
       explanation:
-        'Sends a 6-digit verification code to your Gmail address before unlocking Firebase Cloud backup, multi-device sync, and snapshot restore.',
+        'Requires a 6-digit verification code (sent to Gmail when SMTP is configured, or issued via verified Google OAuth session fallback) before unlocking Firebase Cloud backup and snapshot restore.',
     },
     {
       feature: 'True Offline Mode & Upload Prompt',
@@ -1335,7 +1335,7 @@ export function downloadUserManualPdf(): {
     '- Use the Undo/Redo arrows in the table title bar or press Ctrl+Z / Ctrl+Y to revert or reapply changes, alongside Arrow keys, Tab, and Enter/F2 for fast keyboard entry.',
     '- Rename any payment or savings row inline under PAYMENTS and PesoBudget updates that label across Summary, Charts, and Reports automatically.',
     '- When working offline on the public link, edits stay safely queued locally; upon reconnection, choose Upload & Sync Now so your offline edits replace older cloud data.',
-    '- Signing in with Google requires verifying a 6-digit OTP sent to your Gmail account; all system health and sync alerts appear cleanly at the top of the screen.',
+    '- Signing in with Google requires verifying a 6-digit code (delivered to Gmail when SMTP is set, or via Google-verified session confirmation); system health and sync alerts appear cleanly at the top of the screen.',
     '- When new updates are published on the public web link, read the automatic changelog popup and click OK to confirm or refresh cleanly.',
   ];
 

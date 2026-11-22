@@ -133,6 +133,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [pendingOtpUser, setPendingOtpUser] = useState<User | null>(null);
   const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
+  const [otpDeliveryMode, setOtpDeliveryMode] = useState<'email' | 'oauth_session_code'>('email');
+  const [otpSessionCodeHint, setOtpSessionCodeHint] = useState<string | null>(null);
   const [otpInputCode, setOtpInputCode] = useState('');
   const [otpError, setOtpError] = useState<string | null>(null);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -256,26 +258,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         await signOutFirebase();
         throw new Error('Selected Google account has no email address.');
       }
-      const otpDispatch = await requestGmailVerificationOtp(
-        targetEmail,
-        user.displayName || undefined
-      );
+      const otpDispatch = await requestGmailVerificationOtp(user);
       setPendingOtpUser(user);
       setOtpMaskedEmail(otpDispatch.maskedEmail);
+      setOtpDeliveryMode(otpDispatch.deliveryMode);
+      setOtpSessionCodeHint(otpDispatch.sessionCode || null);
       setOtpInputCode('');
-      setFeedback({
-        type: 'info',
-        text: `Verification code sent to ${otpDispatch.maskedEmail}. Enter the 6-digit code below to complete sign-in.`,
-      });
-      onEmitToast?.({
-        type: 'info',
-        title: 'Verification Code Sent',
-        message: `Check ${otpDispatch.maskedEmail} for your 6-digit sign-in code.`,
-      });
+      if (otpDispatch.deliveryMode === 'oauth_session_code') {
+        setFeedback({
+          type: 'info',
+          text: `Google verified ${otpDispatch.maskedEmail}. Enter the 6-digit session confirmation code below to finish signing in.`,
+        });
+        onEmitToast?.({
+          type: 'info',
+          title: 'Google Account Verified',
+          message: 'Enter the 6-digit confirmation code shown to complete sign-in.',
+        });
+      } else {
+        setFeedback({
+          type: 'info',
+          text: `Verification code sent to ${otpDispatch.maskedEmail}. Enter the 6-digit code below to complete sign-in.`,
+        });
+        onEmitToast?.({
+          type: 'info',
+          title: 'Verification Code Sent',
+          message: `Check ${otpDispatch.maskedEmail} for your 6-digit sign-in code.`,
+        });
+      }
     } catch (err) {
       console.error(err);
       setOtpChallengeActive(false);
       setPendingOtpUser(null);
+      setOtpSessionCodeHint(null);
       const msg = err instanceof Error ? err.message : 'Google sign-in was cancelled or blocked.';
       setFeedback({ type: 'info', text: msg });
       onEmitToast?.({
@@ -300,7 +314,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsVerifyingOtp(true);
     setOtpError(null);
     try {
-      const { verifiedAt } = await verifyGmailOtpCode(pendingOtpUser.email, cleanedCode);
+      const { verifiedAt } = await verifyGmailOtpCode(pendingOtpUser, cleanedCode);
       const accessProfile = await completeGoogleSignInWithOtp(pendingOtpUser, verifiedAt);
 
       const updatedProfile: UserSecurityProfile = {
@@ -325,6 +339,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const signedUid = pendingOtpUser.uid;
       const signedEmail = pendingOtpUser.email || '';
       setPendingOtpUser(null);
+      setOtpSessionCodeHint(null);
       setOtpInputCode('');
 
       if (accessProfile.status !== 'blocked') {
@@ -358,15 +373,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsResendingOtp(true);
     setOtpError(null);
     try {
-      const otpDispatch = await requestGmailVerificationOtp(
-        pendingOtpUser.email,
-        pendingOtpUser.displayName || undefined
-      );
+      const otpDispatch = await requestGmailVerificationOtp(pendingOtpUser);
       setOtpMaskedEmail(otpDispatch.maskedEmail);
+      setOtpDeliveryMode(otpDispatch.deliveryMode);
+      setOtpSessionCodeHint(otpDispatch.sessionCode || null);
       onEmitToast?.({
         type: 'info',
-        title: 'New Code Sent',
-        message: `A fresh 6-digit code was sent to ${otpDispatch.maskedEmail}.`,
+        title: otpDispatch.deliveryMode === 'oauth_session_code' ? 'New Code Issued' : 'New Code Sent',
+        message:
+          otpDispatch.deliveryMode === 'oauth_session_code'
+            ? 'A fresh 6-digit session confirmation code was issued.'
+            : `A fresh 6-digit code was sent to ${otpDispatch.maskedEmail}.`,
       });
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : 'Failed to resend verification code.');
@@ -377,6 +394,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleCancelOtpVerification = async () => {
     setPendingOtpUser(null);
+    setOtpSessionCodeHint(null);
     setOtpInputCode('');
     setOtpError(null);
     try {
@@ -1268,13 +1286,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-xs lg:text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Enter 6-Digit Gmail Verification Code
+                      {otpDeliveryMode === 'oauth_session_code'
+                        ? 'Google Account Verified — Confirm 6-Digit Security Code'
+                        : 'Enter 6-Digit Gmail Verification Code'}
                     </div>
                     <p className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                      Sent to <strong className="font-mono">{otpMaskedEmail || pendingOtpUser.email}</strong>. Verification is required before enabling Google Cloud Sync.
+                      {otpDeliveryMode === 'oauth_session_code' ? (
+                        <>
+                          Google OAuth verified <strong className="font-mono">{otpMaskedEmail || pendingOtpUser.email}</strong>. Enter the session confirmation code below to finish signing in.
+                        </>
+                      ) : (
+                        <>
+                          Sent to <strong className="font-mono">{otpMaskedEmail || pendingOtpUser.email}</strong>. Verification is required before enabling Google Cloud Sync.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
+
+                {otpDeliveryMode === 'oauth_session_code' && otpSessionCodeHint && (
+                  <div className="rounded-lg bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="text-[11px] text-amber-900 dark:text-amber-200 leading-snug">
+                      <span className="font-semibold">Session Code: </span>
+                      <span className="font-mono font-black text-xs tracking-widest px-1.5 py-0.5 rounded bg-white/80 dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 border border-amber-300 dark:border-amber-700">
+                        {otpSessionCodeHint}
+                      </span>
+                      <span className="block text-[10px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                        Email SMTP is not configured in Secrets yet; issued securely for this verified Google session.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpInputCode(otpSessionCodeHint);
+                        if (otpError) setOtpError(null);
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer shrink-0 transition-colors"
+                    >
+                      Fill Code
+                    </button>
+                  </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input

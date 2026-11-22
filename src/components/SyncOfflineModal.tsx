@@ -74,6 +74,8 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [pendingOtpUser, setPendingOtpUser] = useState<User | null>(null);
   const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
+  const [otpDeliveryMode, setOtpDeliveryMode] = useState<'email' | 'oauth_session_code'>('email');
+  const [otpSessionCodeHint, setOtpSessionCodeHint] = useState<string | null>(null);
   const [otpInputCode, setOtpInputCode] = useState('');
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -103,18 +105,27 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
         await signOutFirebase();
         throw new Error('Selected Google account has no email address.');
       }
-      const dispatch = await requestGmailVerificationOtp(user.email, user.displayName || undefined);
+      const dispatch = await requestGmailVerificationOtp(user);
       setPendingOtpUser(user);
       setOtpMaskedEmail(dispatch.maskedEmail);
+      setOtpDeliveryMode(dispatch.deliveryMode);
+      setOtpSessionCodeHint(dispatch.sessionCode || null);
       setOtpInputCode('');
       onEmitToast?.({
         type: 'info',
-        title: 'Verification Code Sent',
-        message: `Enter the 6-digit code sent to ${dispatch.maskedEmail}.`,
+        title:
+          dispatch.deliveryMode === 'oauth_session_code'
+            ? 'Google Account Verified'
+            : 'Verification Code Sent',
+        message:
+          dispatch.deliveryMode === 'oauth_session_code'
+            ? 'Enter the 6-digit confirmation code shown to complete sign-in.'
+            : `Enter the 6-digit code sent to ${dispatch.maskedEmail}.`,
       });
     } catch (err) {
       setOtpChallengeActive(false);
       setPendingOtpUser(null);
+      setOtpSessionCodeHint(null);
       setAccountError(
         err instanceof Error ? err.message : 'Google sign-in was cancelled or blocked.'
       );
@@ -135,7 +146,7 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
     setIsVerifyingOtp(true);
     setAccountError(null);
     try {
-      const { verifiedAt } = await verifyGmailOtpCode(pendingOtpUser.email, cleaned);
+      const { verifiedAt } = await verifyGmailOtpCode(pendingOtpUser, cleaned);
       const accessProfile = await completeGoogleSignInWithOtp(pendingOtpUser, verifiedAt);
       const updated: UserSecurityProfile = {
         ...securityProfile,
@@ -156,6 +167,7 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
       saveSecurityProfile(updated);
       onUpdateSecurityProfile(updated);
       setPendingOtpUser(null);
+      setOtpSessionCodeHint(null);
       setOtpInputCode('');
       onEmitToast?.({
         type: 'success',
@@ -334,12 +346,17 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 text-xs">
                     <MailCheck className="w-4 h-4 shrink-0" />
-                    <span>Enter 6-digit code sent to {otpMaskedEmail}</span>
+                    <span>
+                      {otpDeliveryMode === 'oauth_session_code'
+                        ? `Google Verified (${otpMaskedEmail}) — Enter session code`
+                        : `Enter 6-digit code sent to ${otpMaskedEmail}`}
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setPendingOtpUser(null);
+                      setOtpSessionCodeHint(null);
                       setOtpInputCode('');
                       void signOutFirebase();
                     }}
@@ -348,6 +365,26 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
                     Cancel
                   </button>
                 </div>
+                {otpDeliveryMode === 'oauth_session_code' && otpSessionCodeHint && (
+                  <div className="rounded-lg bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-amber-900 dark:text-amber-200">
+                      Session Code:{' '}
+                      <strong className="font-mono tracking-widest text-emerald-700 dark:text-emerald-300">
+                        {otpSessionCodeHint}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpInputCode(otpSessionCodeHint);
+                        setAccountError(null);
+                      }}
+                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold cursor-pointer shrink-0"
+                    >
+                      Fill Code
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <input
                     type="text"

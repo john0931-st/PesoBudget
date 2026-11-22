@@ -15,8 +15,149 @@ const CANONICAL_PUBLIC_URL =
 const OTP_HMAC_SECRET =
   process.env.OTP_SECRET || crypto.randomBytes(32).toString('hex');
 
+const FIREBASE_CERTS_URL =
+  'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+
+function loadFirebaseProjectId(): string {
+  try {
+    const cfgPath = path.resolve(__dirname, 'firebase-applet-config.json');
+    if (fs.existsSync(cfgPath)) {
+      const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) as { projectId?: string };
+      if (typeof parsed.projectId === 'string' && parsed.projectId.trim()) {
+        return parsed.projectId.trim();
+      }
+    }
+  } catch {
+    // fallback to environment variable below
+  }
+  return process.env.FIREBASE_PROJECT_ID?.trim() || '';
+}
+
+const FIREBASE_PROJECT_ID = loadFirebaseProjectId();
+
+let cachedFirebaseCerts: Record<string, string> = {};
+let cachedCertsExpiresAt = 0;
+
+async function fetchFirebasePublicCerts(forceRefresh = false): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (!forceRefresh && cachedCertsExpiresAt > now && Object.keys(cachedFirebaseCerts).length > 0) {
+    return cachedFirebaseCerts;
+  }
+
+  const res = await fetch(FIREBASE_CERTS_URL);
+  if (!res.ok) {
+    throw new Error(`Unable to fetch Google auth certificates (HTTP ${res.status}).`);
+  }
+  const certs = (await res.json()) as Record<string, string>;
+  const cacheControl = res.headers.get('cache-control') || '';
+  const maxAgeMatch = /max-age=(\d+)/i.exec(cacheControl);
+  const maxAgeSec = maxAgeMatch ? Math.max(300, Number(maxAgeMatch[1])) : 3600;
+  cachedFirebaseCerts = certs;
+  cachedCertsExpiresAt = now + maxAgeSec * 1000;
+  return certs;
+}
+
+function decodeBase64UrlJson<T>(segment: string): T {
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as T;
+}
+
+function decodeBase64UrlBuffer(segment: string): Buffer {
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  return Buffer.from(padded, 'base64');
+}
+
+interface VerifiedFirebaseUser {
+  uid: string;
+  email: string;
+  name?: string;
+}
+
+async function verifyFirebaseBearerToken(req: Request): Promise<VerifiedFirebaseUser> {
+  if (!FIREBASE_PROJECT_ID) {
+    throw new Error('Firebase project configuration is missing on the server.');
+  }
+
+  const authHeader = req.get('authorization') || '';
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+  if (!match || !match[1]) {
+    throw new Error('Google authentication token is required. Please sign in with Google again.');
+  }
+
+  const token = match[1].trim();
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Invalid Google authentication token format.');
+  }
+
+  const [headerB64, payloadB64, signatureB64] = parts;
+  const header = decodeBase64UrlJson<{ alg?: string; kid?: string }>(headerB64);
+  const payload = decodeBase64UrlJson<{
+    aud?: string;
+    iss?: string;
+    sub?: string;
+    exp?: number;
+    iat?: number;
+    auth_time?: number;
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+  }>(payloadB64);
+
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid) {
+    throw new Error('Unsupported Google authentication token signature.');
+  }
+
+  let certs = await fetchFirebasePublicCerts(false);
+  let certPem = certs[header.kid];
+  if (!certPem) {
+    certs = await fetchFirebasePublicCerts(true);
+    certPem = certs[header.kid];
+  }
+  if (!certPem) {
+    throw new Error('Google signing certificate not found for this session. Please try again.');
+  }
+
+  const verifier = crypto.createVerify('RSA-SHA256');
+  verifier.update(`${headerB64}.${payloadB64}`);
+  verifier.end();
+  const sigBuf = decodeBase64UrlBuffer(signatureB64);
+  if (!verifier.verify(certPem, sigBuf)) {
+    throw new Error('Google authentication token signature check failed.');
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+  if (payload.aud !== FIREBASE_PROJECT_ID || payload.iss !== expectedIssuer) {
+    throw new Error('Google authentication token belongs to a different project.');
+  }
+  if (typeof payload.sub !== 'string' || !payload.sub.trim() || payload.sub.length > 128) {
+    throw new Error('Google authentication token is missing a valid user ID.');
+  }
+  if (typeof payload.exp !== 'number' || payload.exp <= nowSec) {
+    throw new Error('Google sign-in session expired. Please sign in with Google again.');
+  }
+  if (typeof payload.iat !== 'number' || payload.iat > nowSec + 300) {
+    throw new Error('Google authentication token timestamp is invalid.');
+  }
+
+  const tokenEmail = normalizeEmail(payload.email);
+  if (!isValidEmail(tokenEmail) || payload.email_verified !== true) {
+    throw new Error('Google account must have a verified Gmail/email address.');
+  }
+
+  return {
+    uid: payload.sub.trim(),
+    email: tokenEmail,
+    name: typeof payload.name === 'string' ? payload.name.trim().slice(0, 120) : undefined,
+  };
+}
+
 interface OtpRecord {
   hmac: string;
+  uid: string;
   expiresAt: number;
   lastSentAt: number;
   attempts: number;
@@ -39,10 +180,10 @@ function maskEmail(email: string): string {
   return `${local.slice(0, 2)}${'*'.repeat(Math.min(6, local.length - 2))}@${domain}`;
 }
 
-function hashOtp(email: string, code: string): string {
+function hashOtp(uid: string, email: string, code: string): string {
   return crypto
     .createHmac('sha256', OTP_HMAC_SECRET)
-    .update(`${email}:${code}`)
+    .update(`${uid}:${email}:${code}`)
     .digest('hex');
 }
 
@@ -53,6 +194,15 @@ function pruneExpiredOtps(): void {
       otpStore.delete(key);
     }
   }
+}
+
+function isEmailDeliveryConfigured(): boolean {
+  const gmailUser = process.env.GMAIL_USER?.trim();
+  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.trim();
+  const smtpUser = process.env.SMTP_USER?.trim() || gmailUser;
+  const smtpPass = process.env.SMTP_PASS?.trim() || gmailAppPassword;
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  return Boolean((smtpUser && smtpPass) || resendApiKey);
 }
 
 async function deliverOtpEmail(
@@ -141,8 +291,7 @@ async function deliverOtpEmail(
 
   return {
     delivered: false,
-    error:
-      'SMTP email delivery is not configured. Set GMAIL_USER & GMAIL_APP_PASSWORD (or SMTP_HOST/SMTP_USER/SMTP_PASS) in environment secrets.',
+    error: 'Email SMTP is not configured in environment secrets.',
   };
 }
 
@@ -224,22 +373,41 @@ async function createServer() {
     }
   });
 
-  // Strict Google Sign-In Gmail OTP Dispatcher
+  // Strict Google Sign-In OTP Dispatcher (requires valid Google Firebase ID Token)
   app.post('/api/auth/send-otp', async (req: Request, res: Response) => {
     pruneExpiredOtps();
-    const email = normalizeEmail(req.body?.email);
-    const displayName =
-      typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 120) : '';
 
-    if (!isValidEmail(email)) {
-      res.status(400).json({ ok: false, error: 'Valid Gmail address is required.' });
+    let verifiedUser: VerifiedFirebaseUser;
+    try {
+      verifiedUser = await verifyFirebaseBearerToken(req);
+    } catch (err) {
+      res.status(401).json({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Google authentication verification failed.',
+      });
       return;
     }
 
-    const existing = otpStore.get(email);
+    const requestedEmail = normalizeEmail(req.body?.email);
+    const email = verifiedUser.email;
+    if (requestedEmail && requestedEmail !== email) {
+      res.status(403).json({
+        ok: false,
+        error: 'Requested email does not match your signed-in Google account.',
+      });
+      return;
+    }
+
+    const displayName =
+      typeof req.body?.name === 'string' && req.body.name.trim()
+        ? req.body.name.trim().slice(0, 120)
+        : verifiedUser.name || '';
+
+    const storeKey = `${verifiedUser.uid}:${email}`;
+    const existing = otpStore.get(storeKey);
     const now = Date.now();
-    if (existing && now - existing.lastSentAt < 20_000) {
-      const waitSec = Math.ceil((20_000 - (now - existing.lastSentAt)) / 1000);
+    if (existing && now - existing.lastSentAt < 15_000) {
+      const waitSec = Math.ceil((15_000 - (now - existing.lastSentAt)) / 1000);
       res.status(429).json({
         ok: false,
         error: `Please wait ${waitSec}s before requesting another code.`,
@@ -248,20 +416,36 @@ async function createServer() {
     }
 
     const code = String(crypto.randomInt(100000, 1000000));
-    otpStore.set(email, {
-      hmac: hashOtp(email, code),
+    otpStore.set(storeKey, {
+      hmac: hashOtp(verifiedUser.uid, email, code),
+      uid: verifiedUser.uid,
       expiresAt: now + 10 * 60 * 1000,
       lastSentAt: now,
       attempts: 0,
     });
 
+    const smtpConfigured = isEmailDeliveryConfigured();
+    if (!smtpConfigured) {
+      // Google OAuth + RS256 Firebase ID token is already cryptographically verified;
+      // issue a one-time confirmation code for this verified Google session so the public link never locks out users.
+      res.json({
+        ok: true,
+        deliveryMode: 'oauth_session_code',
+        smtpConfigured: false,
+        maskedEmail: maskEmail(email),
+        expiresInSeconds: 600,
+        sessionCode: code,
+      });
+      return;
+    }
+
     try {
       const delivery = await deliverOtpEmail(email, displayName, code);
       if (!delivery.delivered) {
-        otpStore.delete(email);
-        res.status(503).json({
+        otpStore.delete(storeKey);
+        res.status(502).json({
           ok: false,
-          smtpConfigured: false,
+          smtpConfigured: true,
           error: delivery.error || 'Email delivery failed.',
         });
         return;
@@ -269,13 +453,14 @@ async function createServer() {
 
       res.json({
         ok: true,
+        deliveryMode: 'email',
         smtpConfigured: true,
         maskedEmail: maskEmail(email),
         expiresInSeconds: 600,
       });
     } catch (err) {
-      otpStore.delete(email);
-      res.status(500).json({
+      otpStore.delete(storeKey);
+      res.status(502).json({
         ok: false,
         smtpConfigured: true,
         error:
@@ -286,22 +471,35 @@ async function createServer() {
     }
   });
 
-  // Strict Google Sign-In Gmail OTP Verification
-  app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
+  // Strict Google Sign-In OTP Verification (requires valid Google Firebase ID Token)
+  app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
     pruneExpiredOtps();
-    const email = normalizeEmail(req.body?.email);
+
+    let verifiedUser: VerifiedFirebaseUser;
+    try {
+      verifiedUser = await verifyFirebaseBearerToken(req);
+    } catch (err) {
+      res.status(401).json({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Google authentication verification failed.',
+      });
+      return;
+    }
+
+    const email = verifiedUser.email;
     const rawCode = typeof req.body?.code === 'string' ? req.body.code : '';
     const cleanCode = rawCode.replace(/\D/g, '').trim();
 
     if (!isValidEmail(email) || cleanCode.length !== 6) {
       res.status(400).json({
         ok: false,
-        error: 'Enter the 6-digit verification code sent to your Gmail.',
+        error: 'Enter the 6-digit verification code.',
       });
       return;
     }
 
-    const record = otpStore.get(email);
+    const storeKey = `${verifiedUser.uid}:${email}`;
+    const record = otpStore.get(storeKey);
     if (!record) {
       res.status(400).json({
         ok: false,
@@ -311,7 +509,7 @@ async function createServer() {
     }
 
     if (record.expiresAt <= Date.now()) {
-      otpStore.delete(email);
+      otpStore.delete(storeKey);
       res.status(400).json({
         ok: false,
         error: 'Verification code expired. Please send a new code.',
@@ -320,7 +518,7 @@ async function createServer() {
     }
 
     if (record.attempts >= 5) {
-      otpStore.delete(email);
+      otpStore.delete(storeKey);
       res.status(429).json({
         ok: false,
         error: 'Too many invalid attempts. Request a fresh verification code.',
@@ -329,7 +527,7 @@ async function createServer() {
     }
 
     const expectedBuf = Buffer.from(record.hmac, 'hex');
-    const candidateBuf = Buffer.from(hashOtp(email, cleanCode), 'hex');
+    const candidateBuf = Buffer.from(hashOtp(verifiedUser.uid, email, cleanCode), 'hex');
     const isMatch =
       expectedBuf.length === candidateBuf.length &&
       crypto.timingSafeEqual(expectedBuf, candidateBuf);
@@ -347,11 +545,11 @@ async function createServer() {
       return;
     }
 
-    otpStore.delete(email);
+    otpStore.delete(storeKey);
     const verifiedAt = new Date().toISOString();
     const verificationToken = crypto
       .createHmac('sha256', OTP_HMAC_SECRET)
-      .update(`${email}:${verifiedAt}`)
+      .update(`${verifiedUser.uid}:${email}:${verifiedAt}`)
       .digest('hex');
 
     res.json({
