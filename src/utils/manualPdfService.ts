@@ -268,7 +268,7 @@ export function downloadUserManualPdf(): {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
         doc.setTextColor(15, 23, 42);
-        doc.text('OCTOBER 2026  [:]', tblX + tblW / 2, tblY + 9, { align: 'center' });
+        doc.text('OCTOBER 2026', tblX + tblW / 2, tblY + 9, { align: 'center' });
 
         // Header Row
         const hdrY = tblY + 13;
@@ -932,10 +932,10 @@ export function downloadUserManualPdf(): {
   drawSectionHeading('2', 'Workspace Layout Description');
   const workspaceAreas: FunctionDocRow[] = [
     {
-      feature: 'Top Navigation & Summary Strip',
+      feature: 'Top Navigation & Toolbar',
       location: 'Top of screen',
       explanation:
-        'Centers view tabs, compact Year selector, neutral Add Sheet and Import/Export/Print buttons with green icons, Currency toggle, Light/Dark mode (Dark default), Sync badge, Settings, and live Metrobank/Salary/Balance totals.',
+        'Centers view tabs, Light/Dark mode (Dark default), Sync badge, and Settings, paired with a compact toolbar holding the Year selector, Add Sheet, Import/Export/Print, and Currency toggle.',
     },
     {
       feature: 'Formula Bar',
@@ -947,7 +947,7 @@ export function downloadUserManualPdf(): {
       feature: 'Budget Table & Filter Strip',
       location: 'Main center canvas',
       explanation:
-        'Provides Undo/Redo header buttons, a Remarks status filter bar (All, Settled, Deferred, Unset) with one-tap Settle Unset, 4-way keyboard navigation, negative signs beside numbers, all-caps SALARY/BALANCE rows, and Emerald or pulsing Rose balances.',
+        'Features an always-centered sheet title with icon-only Undo/Redo arrows, centered Remarks Filter strip (All, Settled, Deferred, Unset) with one-tap Settle Unset, keyboard Ctrl+Z / Ctrl+Y Undo/Redo, 4-way navigation, negative signs beside numbers, all-caps SALARY/BALANCE rows, and Emerald or pulsing Rose balances.',
     },
     {
       feature: 'Active Cell Action Bar',
@@ -1000,16 +1000,16 @@ export function downloadUserManualPdf(): {
         'Tap once or move with Arrow keys and Tab to select cells, and press Enter, F2, or double-click to edit inline (or Escape to cancel).',
     },
     {
-      feature: 'Undo & Redo History',
-      location: 'Table Header / Ctrl+Z & Ctrl+Y',
+      feature: 'Undo & Redo Controls',
+      location: 'Table Title Arrows & Ctrl+Z / Ctrl+Y',
       explanation:
-        'Reverses or reapplies recent worksheet edits, row moves, merges, clears, and batch remark updates with keyboard shortcuts or header buttons.',
+        'Reverses or reapplies recent worksheet edits, row moves, merges, clears, and batch remark updates via the icon-only arrow buttons in the table title or Ctrl+Z / Ctrl+Y.',
     },
     {
       feature: 'Remarks Filter & Batch Settle',
-      location: 'Strip above column headers',
+      location: 'Centered strip above headers',
       explanation:
-        'Filters visible expense bills by All, Settled, Deferred, or Unset status while keeping totals visible, and includes a Settle Unset shortcut.',
+        'Centers a live status filter (All, Settled, Deferred, Unset) alongside a quick Settle Unset shortcut while keeping totals visible.',
     },
     {
       feature: 'Formula Input (=)',
@@ -1072,10 +1072,10 @@ export function downloadUserManualPdf(): {
         'Adds custom currency or text columns anywhere in the sheet and lets you remove or restore default columns.',
     },
     {
-      feature: 'Editable Titles & Labels',
+      feature: 'Dynamic Category Renaming',
       location: 'Sheet Title / Headers / Row Labels',
       explanation:
-        'Allows renaming the sheet heading, column headers, and payment labels directly inline.',
+        'Renames the sheet heading, column headers, or any category under PAYMENTS (such as GoTyme) inline and propagates the updated name automatically across Summary, Charts, Reports, and Exports.',
     },
   ];
 
@@ -1168,16 +1168,28 @@ export function downloadUserManualPdf(): {
         'Exports single sheets or full workbooks to Excel (.xlsx), JSON, PDF reports, or browser printouts, and imports Excel data.',
     },
     {
-      feature: 'Cloud Backup & Restore',
-      location: 'Settings -> Cloud Operations',
+      feature: 'Strict Gmail OTP Cloud Sync',
+      location: 'Settings -> Sign in with Google',
       explanation:
-        'Signs in with Google Firebase to upload backups, sync edits automatically online, and restore saved workbook snapshots.',
+        'Sends a 6-digit verification code to your Gmail address before unlocking Firebase Cloud backup, multi-device sync, and snapshot restore.',
     },
     {
-      feature: 'Auto-Save & Sync Indicator',
-      location: 'Top Bar -> Synced / Saving Badge',
+      feature: 'True Offline Mode & Upload Prompt',
+      location: 'Public Link / Top Bar Sync Badge',
       explanation:
-        'Shows real-time save and Firebase sync status while automatically queuing offline edits until connectivity returns.',
+        'Runs completely offline on the public link via precached PWA assets, tracks changes locally, and asks on reconnection whether to Upload & Sync or Discard Offline edits without losing offline updates.',
+    },
+    {
+      feature: 'Top Toasts & Public Link Monitor',
+      location: 'Top Notification Banner / Settings',
+      explanation:
+        'Checks public link availability automatically in the background and renders all app alerts in modern top-anchored toast notifications.',
+    },
+    {
+      feature: 'Welcome Tour & Admin Console',
+      location: 'First Launch / Settings',
+      explanation:
+        'Guides new users with an interactive 5-step onboarding tour and equips authorized developer administrators with user approval and block controls.',
     },
     {
       feature: 'Portable HTML Folder ZIP',
@@ -1278,12 +1290,12 @@ export function downloadUserManualPdf(): {
     [
       'Step 5',
       'Customize, Undo & Merge',
-      'Reorder bills by dragging or arrow buttons, use Undo/Redo (Ctrl+Z / Ctrl+Y) anytime, and merge or split columns cleanly via the cell bar or 3-dots menus.',
+      'Reorder bills smoothly, press Ctrl+Z / Ctrl+Y anytime to undo or redo, rename any category under PAYMENTS to update charts and summaries, and merge or split cells cleanly.',
     ],
     [
       'Step 6',
-      'Back Up & Export Safely',
-      'Open Settings to sign in with Google for Firebase Cloud Sync, download an encrypted PesoBudget/ ZIP, or export PDF and Excel (.xlsx) reports anytime.',
+      'Verify Gmail, Offline Sync & Export',
+      'Open Settings to sign in with Google using your 6-digit Gmail OTP code, review and upload offline edits on reconnection, or export PDF, Excel, and Portable ZIP backups anytime.',
     ],
   ];
 
@@ -1319,11 +1331,11 @@ export function downloadUserManualPdf(): {
   y += 14;
 
   const tips: string[] = [
-    '- Keep Metrobank-linked bills updated and use Settle Unset or the Remarks Filter bar to verify every obligation before cutoff.',
-    '- Use keyboard shortcuts: Arrow keys & Tab navigate cells, Enter/F2 opens editing, and Ctrl+Z / Ctrl+Y undoes or redoes changes.',
-    '- Pag-IBIG MP2 (locked) and GoTyme (withdrawable) are always reported separately from Ending Balance so liquid cash stays accurate.',
-    '- Mark unpaid bills as Deferred so Add Sheet -> Clean Default Template can offer automatic carryover into your next payroll cutoff.',
-    '- Do not delete or clear local browser data without either signing into Google Cloud Sync or saving a Portable ZIP / JSON backup first.',
+    '- Keep Metrobank-linked bills updated and use the centered Remarks Filter bar or Settle Unset shortcut to verify every obligation before cutoff.',
+    '- Use the Undo/Redo arrows in the table title bar or press Ctrl+Z / Ctrl+Y to revert or reapply changes, alongside Arrow keys, Tab, and Enter/F2 for fast keyboard entry.',
+    '- Rename any payment or savings row inline under PAYMENTS and PesoBudget updates that label across Summary, Charts, and Reports automatically.',
+    '- When working offline on the public link, edits stay safely queued locally; upon reconnection, choose Upload & Sync Now so your offline edits replace older cloud data.',
+    '- Signing in with Google requires verifying a 6-digit OTP sent to your Gmail account; all system health and sync alerts appear cleanly at the top of the screen.',
     '- When new updates are published on the public web link, read the automatic changelog popup and click OK to confirm or refresh cleanly.',
   ];
 

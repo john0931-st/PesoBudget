@@ -358,6 +358,10 @@ export function signOutGoogle(): UserSecurityProfile {
     isEmailVerified: false,
     isPhoneVerified: false,
     backupSyncStatus: 'idle',
+    role: 'user',
+    accessStatus: undefined,
+    otpVerifiedAt: undefined,
+    firebaseUid: undefined,
   };
   saveSecurityProfile(updated);
   return updated;

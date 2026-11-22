@@ -1,0 +1,104 @@
+name: Auto Release, Labels & Repo Sync
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle & compute auto-release metadata
+        run: npm run build
+
+      - name: Extract version and release metadata
+        id: meta
+        run: |
+          node -e "
+            const fs = require('fs');
+            const v = JSON.parse(fs.readFileSync('dist/version.json', 'utf8'));
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const version = v.version || pkg.version || '1.0.0';
+            const tag = 'v' + version;
+            const title = (v.title || 'PesoBudget Release ' + tag).replace(/\r?\n/g, ' ');
+            const notes = [
+              '## ' + tag + ' — ' + title,
+              '',
+              '**Published:** ' + (v.date || '') + (v.timeLabel ? ' (' + v.timeLabel + ')' : ''),
+              '',
+              '### What Changed',
+              ...(Array.isArray(v.changes) ? v.changes.map(c => '- ' + c) : ['- Updated application features and documentation.']),
+              '',
+              '> Automatically generated from repository changes alongside updated PDF User Manual and PWA build.'
+            ].join('\n');
+            fs.writeFileSync('.release-notes.md', notes, 'utf8');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'version=' + version + '\n');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'tag=' + tag + '\n');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'title=' + title + '\n');
+          "
+
+      - name: Update GitHub repository description & topics
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }} \
+            -f description="PesoBudget (${{ steps.meta.outputs.tag }}) — Offline-ready Philippine payroll & expense workbook with Firebase sync, Gmail OTP verification, dynamic category analytics, and auto-updating PDF manual." \
+            -f homepage="https://ais-pre-juv42jdfqkfmr4uvlolrey-190160227104.asia-east1.run.app" || true
+
+      - name: Ensure standard GitHub repository labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "release" --color "059669" --description "Automated release & version bump" --force || true
+          gh label create "auto-updated" --color "0284c7" --description "Auto-synced docs, manual, and changelog" --force || true
+          gh label create "pwa-offline" --color "d97706" --description "Offline-first PWA & queue sync" --force || true
+          gh label create "security-auth" --color "4f46e5" --description "Gmail OTP & admin access controls" --force || true
+
+      - name: Commit auto-synced package.json & README.md if updated
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet package.json README.md .pesobudget-release-history.json 2>/dev/null; then
+            git add package.json README.md .pesobudget-release-history.json
+            git commit -m "chore(release): auto-sync ${{ steps.meta.outputs.tag }} [skip ci]"
+            git push
+          fi
+
+      - name: Create or update GitHub Release for ${{ steps.meta.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+            gh release edit "${{ steps.meta.outputs.tag }}" \
+              --title "${{ steps.meta.outputs.tag }} — ${{ steps.meta.outputs.title }}" \
+              --notes-file .release-notes.md
+          else
+            gh release create "${{ steps.meta.outputs.tag }}" \
+              dist/version.json \
+              --title "${{ steps.meta.outputs.tag }} — ${{ steps.meta.outputs.title }}" \
+              --notes-file .release-notes.md
+          fi

@@ -1,11 +1,12 @@
 /**
  * @file useAutoBackup.ts
  * @description React hook that automates real-time Firestore cloud sync and restore
- * for the authenticated Firebase user when online.
+ * for the authenticated Firebase user when online, while strictly protecting offline
+ * edits from being overwritten on reconnection until the user chooses whether to upload.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { MonthData, UserSecurityProfile } from '../types/budget';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MonthData, TopToastItem, UserSecurityProfile } from '../types/budget';
 import {
   fetchSheetsFromFirestore,
   subscribeToUserSheets,
@@ -19,8 +20,10 @@ interface UseAutoBackupProps {
   firebaseUid: string | null;
   isAuthReady: boolean;
   isOnline?: boolean;
+  hasPendingOfflineChanges?: boolean;
   onUpdateSecurityProfile: (profile: UserSecurityProfile) => void;
   onRestoreMonths: (restoredMonths: Record<string, MonthData>) => void;
+  onEmitToast?: (toast: Omit<TopToastItem, 'id'>) => void;
 }
 
 function getLatestUpdatedMs(monthsMap: Record<string, MonthData>): number {
@@ -38,8 +41,10 @@ export function useAutoBackup({
   firebaseUid,
   isAuthReady,
   isOnline = true,
+  hasPendingOfflineChanges = false,
   onUpdateSecurityProfile,
   onRestoreMonths,
+  onEmitToast,
 }: UseAutoBackupProps) {
   const syncedUidRef = useRef<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,24 +54,51 @@ export function useAutoBackup({
   monthsRef.current = months;
   const profileRef = useRef(securityProfile);
   profileRef.current = securityProfile;
+  const pendingOfflineRef = useRef(hasPendingOfflineChanges);
+  pendingOfflineRef.current = hasPendingOfflineChanges;
   const onUpdateSecurityProfileRef = useRef(onUpdateSecurityProfile);
   onUpdateSecurityProfileRef.current = onUpdateSecurityProfile;
   const onRestoreMonthsRef = useRef(onRestoreMonths);
   onRestoreMonthsRef.current = onRestoreMonths;
+  const onEmitToastRef = useRef(onEmitToast);
+  onEmitToastRef.current = onEmitToast;
 
   const [autoSyncNotice, setAutoSyncNotice] = useState<string | null>(null);
   const [isSyncingFirebase, setIsSyncingFirebase] = useState(false);
 
-  const showNotice = (msg: string, ms = 3800) => {
+  const showNotice = useCallback((msg: string, ms = 3800) => {
     setAutoSyncNotice(msg);
+    if (onEmitToastRef.current) {
+      onEmitToastRef.current({
+        type: 'success',
+        title: 'Cloud Sync',
+        message: msg,
+        durationMs: ms,
+      });
+    }
     setTimeout(() => {
       setAutoSyncNotice((curr) => (curr === msg ? null : curr));
     }, ms);
-  };
+  }, []);
 
-  // 1. Initial Cloud Sync & Real-time cross-device Firestore listener when signed in & online
+  /**
+   * Aligns the internal baseline snapshot after a manual offline upload or restore
+   * so the next render does not race or revert user edits.
+   */
+  const acknowledgeSyncedSnapshot = useCallback((syncedMonths: Record<string, MonthData>) => {
+    prevMonthsJsonRef.current = JSON.stringify(syncedMonths);
+    suppressNextUploadRef.current = true;
+  }, []);
+
+  // 1. Initial Cloud Sync & Real-time cross-device Firestore listener when signed in, online,
+  //    and NO pending offline edits await user confirmation.
   useEffect(() => {
-    if (!isAuthReady || !firebaseUid || !isOnline) {
+    if (!isAuthReady || !firebaseUid || !isOnline || hasPendingOfflineChanges) {
+      setIsSyncingFirebase(false);
+      return;
+    }
+
+    if (profileRef.current.accessStatus === 'blocked') {
       setIsSyncingFirebase(false);
       return;
     }
@@ -81,22 +113,29 @@ export function useAutoBackup({
           setIsSyncingFirebase(true);
           try {
             const cloudMonths = await fetchSheetsFromFirestore(firebaseUid);
-            if (isCancelled) return;
+            if (isCancelled || pendingOfflineRef.current) return;
 
             const cloudKeys = Object.keys(cloudMonths);
             const localMonths = monthsRef.current;
             const cloudLatest = getLatestUpdatedMs(cloudMonths);
             const localLatest = getLatestUpdatedMs(localMonths);
 
-            if (cloudKeys.length > 0 && (cloudLatest >= localLatest || Object.keys(localMonths).length === 0)) {
+            if (
+              cloudKeys.length > 0 &&
+              (cloudLatest > localLatest + 500 || Object.keys(localMonths).length === 0)
+            ) {
               if (JSON.stringify(cloudMonths) !== JSON.stringify(localMonths)) {
                 suppressNextUploadRef.current = true;
+                prevMonthsJsonRef.current = JSON.stringify(cloudMonths);
                 onRestoreMonthsRef.current(cloudMonths);
                 showNotice(
                   `Synced ${cloudKeys.length} sheet(s) from Firebase (${profileRef.current.email || 'Cloud'})`
                 );
               }
-            } else if (Object.keys(localMonths).length > 0 && profileRef.current.autoBackupEnabled !== false) {
+            } else if (
+              Object.keys(localMonths).length > 0 &&
+              profileRef.current.autoBackupEnabled !== false
+            ) {
               await syncAllMonthsToFirestore(firebaseUid, localMonths);
             }
           } finally {
@@ -106,18 +145,19 @@ export function useAutoBackup({
           }
         }
 
-        if (isCancelled) return;
+        if (isCancelled || pendingOfflineRef.current) return;
 
-        // Subscribe to real-time updates from other devices (e.g. Studio <-> Android APK)
         unsubscribe = subscribeToUserSheets(firebaseUid, (remoteMonths) => {
-          if (isCancelled) return;
+          if (isCancelled || pendingOfflineRef.current) return;
           const currentLocalJson = JSON.stringify(monthsRef.current);
           const remoteJson = JSON.stringify(remoteMonths);
           if (remoteJson !== currentLocalJson) {
             const remoteLatest = getLatestUpdatedMs(remoteMonths);
             const localLatest = getLatestUpdatedMs(monthsRef.current);
-            if (remoteLatest >= localLatest) {
+            // Only overwrite local data when remote changes are strictly newer than local edits
+            if (remoteLatest > localLatest + 500) {
               suppressNextUploadRef.current = true;
+              prevMonthsJsonRef.current = remoteJson;
               onRestoreMonthsRef.current(remoteMonths);
               showNotice(`Updated sheets from cloud (${profileRef.current.email || 'Account'})`);
             }
@@ -134,7 +174,7 @@ export function useAutoBackup({
       isCancelled = true;
       if (unsubscribe) unsubscribe();
     };
-  }, [isAuthReady, firebaseUid, isOnline]);
+  }, [isAuthReady, firebaseUid, isOnline, hasPendingOfflineChanges, showNotice]);
 
   // Reset sync marker when signed out
   useEffect(() => {
@@ -144,9 +184,17 @@ export function useAutoBackup({
     }
   }, [firebaseUid]);
 
-  // 2. Continuous Automatic Sync to Firestore on local edits when online & signed in
+  // 2. Continuous Automatic Sync to Firestore on local edits when online, signed in,
+  //    and user has no pending offline batch awaiting manual confirmation.
   useEffect(() => {
-    if (!isAuthReady || !firebaseUid || !isOnline || !securityProfile.autoBackupEnabled) {
+    if (
+      !isAuthReady ||
+      !firebaseUid ||
+      !isOnline ||
+      !securityProfile.autoBackupEnabled ||
+      hasPendingOfflineChanges ||
+      securityProfile.accessStatus === 'blocked'
+    ) {
       return;
     }
 
@@ -173,7 +221,7 @@ export function useAutoBackup({
 
     let isCancelled = false;
     debounceTimerRef.current = setTimeout(async () => {
-      if (isCancelled) return;
+      if (isCancelled || pendingOfflineRef.current) return;
       setIsSyncingFirebase(true);
       try {
         await syncAllMonthsToFirestore(firebaseUid, monthsRef.current);
@@ -201,11 +249,21 @@ export function useAutoBackup({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [months, isOnline, isAuthReady, firebaseUid, securityProfile.autoBackupEnabled]);
+  }, [
+    months,
+    isOnline,
+    isAuthReady,
+    firebaseUid,
+    securityProfile.autoBackupEnabled,
+    securityProfile.accessStatus,
+    hasPendingOfflineChanges,
+    showNotice,
+  ]);
 
   return {
     autoSyncNotice,
     isSyncingFirebase,
+    acknowledgeSyncedSnapshot,
     clearNotice: () => setAutoSyncNotice(null),
   };
 }

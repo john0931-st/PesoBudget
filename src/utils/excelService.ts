@@ -177,6 +177,7 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
   const combined = computeOverallWorkbookData(months);
   const grouped = groupSheetsByCalendarMonth(months);
   const historical = Object.values(grouped);
+  const rl = combined.rowLabels;
 
   const wsData: any[][] = [];
 
@@ -190,15 +191,15 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
   // Section 1: Financial Snapshot KPI Metrics
   wsData.push(['PAGE 1: OVERALL FINANCIAL SNAPSHOT & KEY METRICS', '', '', '', '']);
   wsData.push(['Metric', `Amount (${currencyCode})`, 'Notes / Description', '', '']);
-  wsData.push(['Total Monthly Bills', Math.abs(combined.totalExpenses), 'House, utilities, loans & Lazada']);
-  wsData.push(['Metrobank ATM Cash', combined.plannedMetrobank, 'Physical cash withdrawn for bills']);
-  wsData.push(['QR PH Digital Payments', combined.plannedQrPh, 'Digital transfers for Lazada/Shopee']);
-  wsData.push(['Total Gross Salary', combined.salaryVal, 'Total earnings across cutoffs']);
-  wsData.push(['Net Surplus / Ending Balance', combined.balanceVal, 'Salary - Total Outflow']);
-  wsData.push(['Pag-IBIG MP2 Government Savings', Math.abs(combined.governmentSavings), 'Locked government sovereign savings']);
-  wsData.push(['GoTyme Personal Stash', combined.gotymeVal, 'Liquid emergency & personal savings']);
-  wsData.push(['Personal Savings (GoTyme + Balance)', combined.personalSavings, 'Total liquid personal reserve']);
-  wsData.push(['Total Combined Stash', combined.totalCombinedSavings, 'Government (MP2) + Personal Savings']);
+  wsData.push(['Total Monthly Bills', Math.abs(combined.totalExpenses), `House, utilities, loans & ${rl.lazada}`]);
+  wsData.push([`${rl.metrobank} ATM Cash`, combined.plannedMetrobank, 'Physical cash withdrawn for bills']);
+  wsData.push([`${rl.qr_ph} Digital Payments`, combined.plannedQrPh, `Digital transfers for ${rl.lazada}`]);
+  wsData.push([`Total Gross ${rl.salary}`, combined.salaryVal, 'Total earnings across cutoffs']);
+  wsData.push([`Net Surplus / Ending ${rl.balance}`, combined.balanceVal, `${rl.salary} - Total Outflow`]);
+  wsData.push([`${rl.mp2} (Locked)`, Math.abs(combined.governmentSavings), 'Locked long-term savings']);
+  wsData.push([`${rl.gotyme} (Withdrawable)`, combined.gotymeVal, 'Liquid personal savings']);
+  wsData.push([`Personal Savings (${rl.gotyme} + ${rl.balance})`, combined.personalSavings, 'Total liquid personal reserve']);
+  wsData.push(['Total Combined Stash', combined.totalCombinedSavings, `${rl.mp2} + Personal Savings`]);
   wsData.push([]);
 
   // Section 2: Payroll Settlement & Cutoff Breakdown
@@ -207,9 +208,9 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
   wsData.push(['Settled Bills', combined.settledAmount, combined.settledCount, `${combined.settlementPercent.toFixed(1)}%`]);
   wsData.push(['Deferred Bills', combined.nextPayrollAmount, combined.nextPayrollCount, `${(100 - combined.settlementPercent).toFixed(1)}%`]);
   wsData.push([]);
-  wsData.push(['Cutoff Sheet', 'Expenses', 'Salary', 'MP2 Savings', 'Personal Savings', 'Ending Balance']);
+  wsData.push(['Cutoff Sheet', 'Expenses', rl.salary, `${rl.mp2} (Locked)`, `${rl.gotyme} (Withdrawable)`, `Ending ${rl.balance}`]);
   combined.cutoffSummaries.forEach((cs) => {
-    wsData.push([cs.name, cs.expenses, cs.salary, cs.govSavings, cs.personalSavings, cs.endingBalance]);
+    wsData.push([cs.name, cs.expenses, cs.salary, cs.govSavings, Math.max(0, cs.personalSavings - cs.endingBalance), cs.endingBalance]);
   });
   wsData.push([]);
 
@@ -222,38 +223,38 @@ export function buildWorksheetForSummary(months: Record<string, MonthData>): XLS
   });
   wsData.push([]);
 
-  // Section 4: Cash Flow - Physical ATM Cash vs Digital QR PH
+  // Section 4: Cash Flow - Physical ATM Cash vs Digital
   wsData.push(['PAGE 4: CASH FLOW (ATM CASH VS DIGITAL)', '', '', '', '']);
   wsData.push(['Channel', `Amount (${currencyCode})`, 'Description', '', '']);
-  wsData.push(['Metrobank ATM Cash', combined.plannedMetrobank, 'Physical cash withdrawal']);
-  wsData.push(['QR PH Digital Transfer', combined.plannedQrPh, 'InstaPay / QR digital payments']);
+  wsData.push([`${rl.metrobank} ATM Cash`, combined.plannedMetrobank, 'Physical cash withdrawal']);
+  wsData.push([`${rl.qr_ph} Digital Transfer`, combined.plannedQrPh, 'InstaPay / QR digital payments']);
   wsData.push(['Total Disbursed', combined.plannedMetrobank + combined.plannedQrPh, 'Sum of all disbursements']);
   wsData.push([]);
 
   // Section 5: Executive Savings & Stash Breakdown
   wsData.push(['PAGE 5: EXECUTIVE SAVINGS & STASH BREAKDOWN', '', '', '', '']);
   wsData.push(['Savings Vehicle', `Amount (${currencyCode})`, 'Category', 'Liquidity', '']);
-  wsData.push(['Pag-IBIG MP2 Government', Math.abs(combined.governmentSavings), 'Government Sovereign Fund', '5-Year Maturity']);
-  wsData.push(['GoTyme Stash', combined.gotymeVal, 'Personal Bank', 'Immediate Liquid']);
-  wsData.push(['Payroll Ending Balance', combined.balanceVal, 'Operating Surplus', 'Immediate Liquid']);
-  wsData.push(['Total Personal Savings', combined.personalSavings, 'GoTyme + Ending Balance', 'Combined Liquid']);
-  wsData.push(['Grand Total Savings', combined.totalCombinedSavings, 'MP2 + Personal Savings', 'All Reserves']);
+  wsData.push([`${rl.mp2} (Locked)`, Math.abs(combined.governmentSavings), 'Long-Term Fund', '5-Year Maturity']);
+  wsData.push([`${rl.gotyme} Stash`, combined.gotymeVal, 'Personal Bank', 'Immediate Liquid']);
+  wsData.push([`Payroll Ending ${rl.balance}`, combined.balanceVal, 'Operating Surplus', 'Immediate Liquid']);
+  wsData.push(['Total Personal Savings', combined.personalSavings, `${rl.gotyme} + Ending ${rl.balance}`, 'Combined Liquid']);
+  wsData.push(['Grand Total Savings', combined.totalCombinedSavings, `${rl.mp2} + Personal Savings`, 'All Reserves']);
   wsData.push([]);
 
   // Section 6: Annual Cash Flow Waterfall & Net Position
   wsData.push(['PAGE 6: CASH FLOW WATERFALL & NET POSITION', '', '', '', '']);
   wsData.push(['Flow Item', `Amount (${currencyCode})`, 'Net Effect', '', '']);
-  wsData.push(['(+) Total Annual Salary', combined.salaryVal, 'Inflow']);
-  wsData.push(['(-) Metrobank & QR PH Bills', -Math.abs(combined.totalExpenses), 'Outflow']);
-  wsData.push(['(-) Pag-IBIG MP2 Government Savings', -Math.abs(combined.governmentSavings), 'Savings Allocation']);
-  wsData.push(['(=) Net Personal Savings (GoTyme + Balance)', combined.personalSavings, 'Final Net Position']);
+  wsData.push([`(+) Total Annual ${rl.salary}`, combined.salaryVal, 'Inflow']);
+  wsData.push([`(-) ${rl.metrobank} & ${rl.qr_ph} Bills`, -Math.abs(combined.totalExpenses), 'Outflow']);
+  wsData.push([`(-) ${rl.mp2} (Locked)`, -Math.abs(combined.governmentSavings), 'Savings Allocation']);
+  wsData.push([`(=) Net Personal Savings (${rl.gotyme} + ${rl.balance})`, combined.personalSavings, 'Final Net Position']);
   wsData.push([]);
 
   // Section 7: Historical Multi-Month Progression
   wsData.push(['PAGE 7: MULTI-MONTH HISTORICAL PROGRESSION', '', '', '', '']);
-  wsData.push(['Calendar Month', 'Total Bills', 'Salary', 'Pag-IBIG MP2', 'Personal Savings', 'Ending Balance']);
+  wsData.push(['Calendar Month', 'Total Bills', rl.salary, `${rl.mp2} (Locked)`, `${rl.gotyme} (Withdrawable)`, `Ending ${rl.balance}`]);
   historical.forEach((hm) => {
-    wsData.push([hm.displayName, hm.totalExpenses, hm.salaryVal, hm.governmentSavings, hm.personalSavings, hm.balanceVal]);
+    wsData.push([hm.displayName, hm.totalExpenses, hm.salaryVal, hm.governmentSavings, hm.gotymeVal, hm.balanceVal]);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);

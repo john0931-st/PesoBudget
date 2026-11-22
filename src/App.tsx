@@ -14,6 +14,7 @@ import {
   SalaryBreakdown,
   BudgetRowState,
   UserSecurityProfile,
+  TopToastItem,
 } from './types/budget';
 import {
   loadSavedMonths,
@@ -32,7 +33,7 @@ import {
 import { recalculateMonthData } from './utils/computation';
 import { evaluateFormulaInput } from './utils/formula';
 import { exportMonthToExcel } from './utils/excelService';
-import { formatPHP, formatCurrency, SUPPORTED_CURRENCIES } from './utils/currency';
+import { formatCurrency, SUPPORTED_CURRENCIES } from './utils/currency';
 import { useCurrency } from './hooks/useCurrency';
 import { extractMonthKey } from './utils/monthGrouping';
 import {
@@ -41,6 +42,13 @@ import {
   getCloudBackups,
   createGoogleCloudBackup,
 } from './services/securityService';
+import {
+  fetchSheetsFromFirestore,
+  fetchUserAccessProfile,
+  isDeveloperAdminEmail,
+  isEmailOtpVerifiedLocally,
+  isOtpChallengeActive,
+} from './services/firebaseSyncService';
 import { auth } from './firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 
@@ -56,9 +64,16 @@ import { ImportExportModal } from './components/ImportExportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SyncOfflineModal } from './components/SyncOfflineModal';
 import { ChangeLogSheet } from './components/ChangeLogSheet';
+import { TopToastContainer } from './components/TopToastContainer';
+import {
+  OnboardingTourModal,
+  hasCompletedOnboardingTour,
+} from './components/OnboardingTourModal';
+import { AdminModal } from './components/AdminModal';
 import { addChangeLog, replaceChangeLogs } from './utils/changeLogService';
 import { useAutoBackup } from './hooks/useAutoBackup';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { usePublicLinkMonitor } from './hooks/usePublicLinkMonitor';
 import { addOfflineChange, replaceOfflineChanges } from './utils/offlineQueue';
 import {
   isFolderAutoSyncArmed,
@@ -81,10 +96,7 @@ import releaseNotesData from './data/releaseNotes.json';
 
 import {
   Calendar,
-  RotateCcw,
   HelpCircle,
-  TrendingUp,
-  CreditCard,
   ArrowUpDown,
   FileSpreadsheet,
   ShieldCheck,
@@ -305,9 +317,57 @@ export default function App() {
   const [isImportExportModalOpen, setIsImportExportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
   const [securityProfile, setSecurityProfile] = useState<UserSecurityProfile>(() => getSecurityProfile());
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+
+  // Top-positioned toast notifications queue
+  const [toasts, setToasts] = useState<TopToastItem[]>([]);
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const dismissToast = useCallback((id: string) => {
+    const existing = toastTimersRef.current.get(id);
+    if (existing) {
+      clearTimeout(existing);
+      toastTimersRef.current.delete(id);
+    }
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const emitToast = useCallback(
+    (toast: Omit<TopToastItem, 'id'>) => {
+      const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const durationMs = toast.durationMs ?? 4200;
+      setToasts((prev) => [...prev.slice(-3), { ...toast, id }]);
+      const timer = setTimeout(() => {
+        toastTimersRef.current.delete(id);
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, durationMs);
+      toastTimersRef.current.set(id, timer);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const timersMap = toastTimersRef.current;
+    return () => {
+      timersMap.forEach((timer) => clearTimeout(timer));
+      timersMap.clear();
+    };
+  }, []);
+
+  // Show welcome tour automatically once for first-time users (after any release update notice is closed)
+  useEffect(() => {
+    if (updateNoticeState) return;
+    if (!hasCompletedOnboardingTour()) {
+      const timer = setTimeout(() => {
+        setIsTourOpen(true);
+      }, 650);
+      return () => clearTimeout(timer);
+    }
+  }, [updateNoticeState]);
 
   const [connectedDataFolder, setConnectedDataFolder] = useState<string | null>(null);
 
@@ -327,31 +387,81 @@ export default function App() {
     onConfirm?: () => void;
   } | null>(null);
 
-  // Listen to Firebase Auth state (Google Sign-In across sessions; skipped when opened directly via file://)
+  // Listen to Firebase Auth state (strictly gates cloud activation until Gmail OTP verification succeeds)
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
       setIsAuthReady(true);
       return;
     }
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       setIsAuthReady(true);
 
+      // Pause auto-activation while 6-digit Gmail OTP challenge popup is active in Settings/Sync modal
+      if (user && isOtpChallengeActive()) {
+        return;
+      }
+
       if (user) {
+        const email = user.email || '';
+        const verifiedLocally = isEmailOtpVerifiedLocally(email);
+        let accessProfile = await fetchUserAccessProfile(user.uid);
+        const hasVerifiedSession = verifiedLocally || Boolean(accessProfile?.otpVerifiedAt);
+
+        if (!hasVerifiedSession) {
+          // Strict rule: do not auto-sign-in without Gmail code verification
+          setSecurityProfile((prev) => {
+            const updated: UserSecurityProfile = {
+              ...prev,
+              isAuthenticated: false,
+              email: '',
+              name: '',
+              picture: '',
+              isSessionUnlocked: true,
+              isEmailVerified: false,
+              backupSyncStatus: 'idle',
+              role: undefined,
+              accessStatus: undefined,
+              otpVerifiedAt: undefined,
+              firebaseUid: undefined,
+            };
+            saveSecurityProfile(updated);
+            return updated;
+          });
+          return;
+        }
+
+        const role =
+          accessProfile?.role || (isDeveloperAdminEmail(email) ? 'admin' : 'user');
+        const accessStatus =
+          accessProfile?.status || (role === 'admin' ? 'approved' : 'approved');
+
         setSecurityProfile((prev) => {
           const updated: UserSecurityProfile = {
             ...prev,
             isAuthenticated: true,
-            email: user.email || '',
-            name: user.displayName || (user.email ? user.email.split('@')[0] : 'Google User'),
+            email,
+            name: user.displayName || (email ? email.split('@')[0] : 'Google User'),
             picture: user.photoURL || prev.picture || '',
             isSessionUnlocked: true,
-            isEmailVerified: user.emailVerified,
-            backupSyncStatus: 'synced',
+            isEmailVerified: true,
+            backupSyncStatus: accessStatus === 'blocked' ? 'idle' : 'synced',
+            role,
+            accessStatus,
+            otpVerifiedAt: accessProfile?.otpVerifiedAt || prev.otpVerifiedAt || new Date().toISOString(),
+            firebaseUid: user.uid,
           };
           saveSecurityProfile(updated);
           return updated;
         });
+
+        if (accessStatus === 'blocked') {
+          emitToast({
+            type: 'error',
+            title: 'Account Access Restricted',
+            message: 'Cloud sync for this account has been blocked by the app administrator.',
+          });
+        }
       } else {
         setSecurityProfile((prev) => {
           const updated: UserSecurityProfile = {
@@ -363,6 +473,10 @@ export default function App() {
             isSessionUnlocked: true,
             isEmailVerified: false,
             backupSyncStatus: 'idle',
+            role: undefined,
+            accessStatus: undefined,
+            otpVerifiedAt: undefined,
+            firebaseUid: undefined,
           };
           saveSecurityProfile(updated);
           return updated;
@@ -370,7 +484,7 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [emitToast]);
 
   // Real-time network status & offline queue tracking
   const {
@@ -383,6 +497,12 @@ export default function App() {
     justReconnected,
     clearReconnectedFlag,
   } = useNetworkStatus();
+
+  // Background public link health monitor with top toast notifications
+  const { linkStatus, checkPublicLink } = usePublicLinkMonitor({
+    isOnline,
+    onEmitToast: emitToast,
+  });
 
   // Automatic modern popup when transitioning back online with pending offline changes
   const hasAutoOpenedForBatchRef = useRef(false);
@@ -405,24 +525,26 @@ export default function App() {
     setMonths(restored);
     saveAllMonths(restored);
     const firstId = Object.keys(restored)[0];
-    if (firstId) {
+    if (firstId && !restored[activeMonthId]) {
       setActiveMonthIdState(firstId);
       setActiveMonthId(firstId);
     }
-  }, []);
+  }, [activeMonthId]);
 
-  // Automated continuous Firebase Cloud sync and auto-restore hook
-  const { autoSyncNotice, isSyncingFirebase, clearNotice } = useAutoBackup({
+  // Automated continuous Firebase Cloud sync and auto-restore hook (protects pending offline edits!)
+  const { isSyncingFirebase, acknowledgeSyncedSnapshot } = useAutoBackup({
     months,
     securityProfile,
     firebaseUid: firebaseUser?.uid || null,
     isAuthReady,
     isOnline,
+    hasPendingOfflineChanges: offlineCount > 0,
     onUpdateSecurityProfile: (updated) => {
       setSecurityProfile(updated);
       saveSecurityProfile(updated);
     },
     onRestoreMonths: handleRestoreMonthsFromSync,
+    onEmitToast: emitToast,
   });
 
   // Track brief local storage & local folder auto-save activity for TopNav indicator
@@ -721,7 +843,13 @@ export default function App() {
       }
     }
     setActiveCell(null);
-  }, [undoStack, persistMonths, activeMonthId]);
+    emitToast({
+      type: 'info',
+      title: 'Undo Applied',
+      message: 'Reverted your last worksheet change.',
+      durationMs: 2200,
+    });
+  }, [undoStack, persistMonths, activeMonthId, emitToast]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
@@ -738,7 +866,13 @@ export default function App() {
       }
     }
     setActiveCell(null);
-  }, [redoStack, persistMonths, activeMonthId]);
+    emitToast({
+      type: 'info',
+      title: 'Redo Applied',
+      message: 'Restored the undone worksheet change.',
+      durationMs: 2200,
+    });
+  }, [redoStack, persistMonths, activeMonthId, emitToast]);
 
   // Global Ctrl+Z / Ctrl+Y / Cmd+Shift+Z shortcut for worksheet Undo/Redo
   useEffect(() => {
@@ -749,6 +883,8 @@ export default function App() {
       isImportExportModalOpen ||
       isSettingsModalOpen ||
       isSyncModalOpen ||
+      isAdminModalOpen ||
+      isTourOpen ||
       Boolean(noteTarget) ||
       Boolean(actionModal) ||
       Boolean(updateNoticeState) ||
@@ -794,6 +930,8 @@ export default function App() {
     isImportExportModalOpen,
     isSettingsModalOpen,
     isSyncModalOpen,
+    isAdminModalOpen,
+    isTourOpen,
     noteTarget,
     actionModal,
     updateNoticeState,
@@ -946,7 +1084,7 @@ export default function App() {
     [months, activeMonthId, currentMonth, persistMonths, selectedYear, isOnline]
   );
 
-  // Update row label (e.g. rename Loan or custom bill)
+  // Update row label (e.g. rename Loan, GoTyme -> MariBank, or custom bill)
   const handleUpdateRowLabel = useCallback(
     (rowId: RowId, newLabel: string) => {
       const targetMonth = months[activeMonthId] || currentMonth;
@@ -962,6 +1100,7 @@ export default function App() {
             label: newLabel,
           },
         },
+        updatedAt: new Date().toISOString(),
       };
 
       const updatedMonths = {
@@ -1006,14 +1145,26 @@ export default function App() {
       const updatedMonth: MonthData = {
         ...targetMonth,
         sheetTitle: newTitle,
+        updatedAt: new Date().toISOString(),
       };
       const updatedMonths = {
         ...months,
         [activeMonthId]: updatedMonth,
       };
       persistMonths(updatedMonths);
+
+      if (!isOnline && targetMonth.sheetTitle !== newTitle) {
+        addOfflineChange({
+          action: 'sheet_rename',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          oldValue: targetMonth.sheetTitle || '',
+          newValue: newTitle,
+          description: `Renamed sheet header to "${newTitle}"`,
+        });
+      }
     },
-    [months, activeMonthId, currentMonth, persistMonths]
+    [months, activeMonthId, currentMonth, persistMonths, isOnline, selectedYear]
   );
 
   // Dynamically add another loan line item between House (rent) and Water Bill
@@ -1311,14 +1462,26 @@ export default function App() {
           ...(targetMonth.columnHeaders || {}),
           [col]: newTitle.trim(),
         },
+        updatedAt: new Date().toISOString(),
       };
       const updatedMonths = {
         ...months,
         [activeMonthId]: updatedMonth,
       };
       persistMonths(updatedMonths);
+
+      if (!isOnline) {
+        addOfflineChange({
+          action: 'label_rename',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          column: col,
+          newValue: newTitle.trim(),
+          description: `Updated column header "${col}" to "${newTitle.trim()}"`,
+        });
+      }
     },
-    [months, activeMonthId, currentMonth, persistMonths]
+    [months, activeMonthId, currentMonth, persistMonths, isOnline, selectedYear]
   );
 
   // Update a cell inside a user-added custom column
@@ -1924,6 +2087,7 @@ export default function App() {
           ...targetMonth.rows,
           [rowId]: updatedRow,
         },
+        updatedAt: new Date().toISOString(),
       };
 
       const updatedMonths = {
@@ -1933,6 +2097,20 @@ export default function App() {
 
       persistMonths(updatedMonths);
 
+      if (!isOnline) {
+        addOfflineChange({
+          action: 'cell_edit',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          rowLabel: targetRow.label,
+          column: String(column),
+          newValue: noteText || 'Cleared note',
+          description: noteText
+            ? `Updated note on "${targetRow.label}"`
+            : `Removed note on "${targetRow.label}"`,
+        });
+      }
+
       if (activeCell && activeCell.rowId === rowId && activeCell.column === column) {
         setActiveCell({
           ...activeCell,
@@ -1940,7 +2118,7 @@ export default function App() {
         });
       }
     },
-    [noteTarget, months, activeMonthId, currentMonth, activeCell, persistMonths]
+    [noteTarget, months, activeMonthId, currentMonth, activeCell, persistMonths, isOnline, selectedYear]
   );
 
   // Remove note attached to a specific cell
@@ -1979,6 +2157,7 @@ export default function App() {
           ...targetMonth.rows,
           [rowId]: updatedRow,
         },
+        updatedAt: new Date().toISOString(),
       };
 
       const updatedMonths = {
@@ -1987,6 +2166,17 @@ export default function App() {
       };
       persistMonths(updatedMonths);
 
+      if (!isOnline) {
+        addOfflineChange({
+          action: 'cell_edit',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          rowLabel: targetRow.label,
+          column: String(column),
+          description: `Removed note on "${targetRow.label}"`,
+        });
+      }
+
       if (activeCell && activeCell.rowId === rowId && activeCell.column === column) {
         setActiveCell({
           ...activeCell,
@@ -1994,7 +2184,7 @@ export default function App() {
         });
       }
     },
-    [months, activeMonthId, currentMonth, activeCell, persistMonths]
+    [months, activeMonthId, currentMonth, activeCell, persistMonths, isOnline, selectedYear]
   );
 
   // Save Salary configuration
@@ -2017,8 +2207,18 @@ export default function App() {
       };
 
       persistMonths(updatedMonths);
+
+      if (!isOnline) {
+        addOfflineChange({
+          action: 'cell_edit',
+          sheetName: targetMonth.name,
+          year: targetMonth.year || selectedYear,
+          rowLabel: targetMonth.rows['salary']?.label || 'SALARY',
+          description: 'Updated Salary Breakdown configuration',
+        });
+      }
     },
-    [months, activeMonthId, currentMonth, persistMonths]
+    [months, activeMonthId, currentMonth, persistMonths, isOnline, selectedYear]
   );
 
   // Create new month: default template has empty expense cells, preserved formulas, optional previous balance & deferred bills carryover
@@ -2214,7 +2414,16 @@ export default function App() {
       actionLabel: 'Sheet Duplicated',
       description: `Duplicated sheet from "${sourceMonth.name}" to "${duplicated.name}"`,
     });
-  }, [months, persistMonths, selectedYear]);
+
+    if (!isOnline) {
+      addOfflineChange({
+        action: 'sheet_duplicate',
+        sheetName: duplicated.name,
+        year: duplicated.year || selectedYear,
+        description: `Duplicated sheet "${sourceMonth.name}" to "${duplicated.name}"`,
+      });
+    }
+  }, [months, persistMonths, selectedYear, isOnline]);
 
   // Delete sheet / month
   const handleDeleteMonth = useCallback((monthId: string) => {
@@ -2386,12 +2595,6 @@ export default function App() {
       return updated;
     });
   }, [persistMonths, securityProfile]);
-
-  // Quick calculations for the top summary strip
-  const metroKinsenas = currentMonth.rows['metrobank']?.cutoff15th.value || 0;
-  const salaryKinsenas = currentMonth.rows['salary']?.cutoff15th.value || 0;
-  const balanceKinsenas = currentMonth.rows['balance']?.cutoff15th.value || 0;
-  const totalMonthsCount = Object.keys(months).length;
 
   return (
     <div className="h-dvh max-h-dvh print:h-auto print:max-h-none print:overflow-visible w-full max-w-full min-w-0 flex flex-col font-sans overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-150">
@@ -2815,43 +3018,6 @@ export default function App() {
               )}
             </div>
           </div>
-
-          {/* Quick Real-Time Metrics Strip (Tabular figures) */}
-          <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 sm:gap-x-3 lg:gap-x-4 text-xs sm:text-[13px] lg:text-sm xl:text-[15px] font-mono">
-            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 shrink-0">
-              <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="font-sans font-semibold text-xs lg:text-[13px] xl:text-sm">METROBANK:</span>
-              <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                {hasDataForSelectedYear ? formatPHP(metroKinsenas) : formatCurrency(0)}
-              </span>
-            </div>
-
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-
-            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 shrink-0">
-              <TrendingUp className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-              <span className="font-sans font-semibold text-xs lg:text-[13px] xl:text-sm">Salary:</span>
-              <span className="font-bold text-violet-700 dark:text-violet-400 tabular-nums">
-                {hasDataForSelectedYear ? formatPHP(salaryKinsenas) : formatCurrency(0)}
-              </span>
-            </div>
-
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-
-            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 shrink-0">
-              <span className="font-sans font-semibold text-xs lg:text-[13px] xl:text-sm">Balance:</span>
-              <span
-                className={`font-bold tabular-nums ${
-                  hasDataForSelectedYear && balanceKinsenas >= 0
-                    ? 'text-emerald-700 dark:text-emerald-400'
-                    : 'text-rose-700 dark:text-rose-400'
-                }`}
-                title="Formula: (Salary - Total) - (MP2 + Gotyme)"
-              >
-                {hasDataForSelectedYear ? formatPHP(balanceKinsenas) : formatCurrency(0)}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -3161,7 +3327,7 @@ export default function App() {
         onTriggerPrint={handleTriggerPrint}
       />
 
-      {/* Settings Modal (Firebase Cloud Backup, Portable HTML Folder & Local data/ Sync) */}
+      {/* Settings Modal (Firebase Cloud Backup, Gmail OTP Sign-In, Admin Console, Portable HTML & Tour) */}
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
@@ -3201,9 +3367,14 @@ export default function App() {
             if (targetId) handleSelectMonth(targetId);
           }
         }}
+        onOpenAdmin={() => setIsAdminModalOpen(true)}
+        onReplayTour={() => setIsTourOpen(true)}
+        linkStatus={linkStatus}
+        onCheckPublicLink={checkPublicLink}
+        onEmitToast={emitToast}
       />
 
-      {/* Modern Offline & Online Sync Modal */}
+      {/* Modern Offline & Online Sync Modal (Preserves & Uploads Offline Edits Permanently) */}
       <SyncOfflineModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
@@ -3216,8 +3387,41 @@ export default function App() {
           setSecurityProfile(updated);
           saveSecurityProfile(updated);
         }}
+        onMonthsSynchronized={(synced) => {
+          acknowledgeSyncedSnapshot(synced);
+          handleRestoreMonthsFromSync(synced);
+        }}
+        onDiscardOfflineAndRestoreCloud={async () => {
+          if (!firebaseUser?.uid || !isOnline) return false;
+          const cloudMonths = await fetchSheetsFromFirestore(firebaseUser.uid);
+          if (cloudMonths && Object.keys(cloudMonths).length > 0) {
+            acknowledgeSyncedSnapshot(cloudMonths);
+            handleRestoreMonthsFromSync(cloudMonths);
+            return true;
+          }
+          return false;
+        }}
+        onEmitToast={emitToast}
         simulateOffline={simulateOffline}
         onToggleSimulateOffline={toggleSimulateOffline}
+      />
+
+      {/* Developer-Only Admin Console (Visible exclusively to archiejp21@gmail.com) */}
+      <AdminModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        currentEmail={securityProfile.isAuthenticated ? securityProfile.email : undefined}
+        isOnline={isOnline}
+        linkStatus={linkStatus}
+        onCheckPublicLink={checkPublicLink}
+        onEmitToast={emitToast}
+      />
+
+      {/* Guided Interactive Onboarding Tour Popup */}
+      <OnboardingTourModal
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
 
       {/* Modern 5-Second Loading Screen when Year is Selected */}
@@ -3310,19 +3514,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Real-time Google Cloud Auto-Sync Notice Toast */}
-      {autoSyncNotice && (
-        <div className="fixed pb-floating-bottom right-4 sm:right-6 z-40 bg-slate-900 dark:bg-slate-800 text-white px-3.5 py-2 rounded-lg shadow-xl border border-slate-700 dark:border-slate-600 text-xs lg:text-sm font-semibold flex items-center gap-2 max-w-[calc(100vw-2rem)]">
-          <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{autoSyncNotice}</span>
-          <button
-            onClick={clearNotice}
-            className="text-slate-400 hover:text-white ml-1 font-bold cursor-pointer"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      {/* Top-Anchored Modern Toast Notifications (All app notices appear cleanly at the top) */}
+      <TopToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Public Web Link Update & Republish Changes Popup */}
       <UpdateChangesModal

@@ -47,10 +47,10 @@ import {
   Split,
   ArrowUp,
   ArrowDown,
-  Undo2,
-  Redo2,
   Filter,
   CheckCheck,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 interface BudgetTableProps {
@@ -1125,41 +1125,8 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-1 sm:p-1.5 select-text">
       <div className="w-full h-full min-h-0 flex flex-col bg-white dark:bg-slate-900 border border-slate-300/90 dark:border-slate-700/90 ring-1 ring-slate-900/[0.04] dark:ring-white/[0.06] shadow-[0_0_16px_rgba(15,23,42,0.08),0_1px_4px_rgba(15,23,42,0.05)] dark:shadow-[0_0_20px_rgba(0,0,0,0.45),0_1px_4px_rgba(0,0,0,0.3)] rounded-2xl overflow-hidden transition-colors">
-        {/* Editable Master Sheet Header: Undo/Redo + Editable Title + 3-Dots Column Menu */}
-        <div className="bg-gradient-to-b from-slate-50/90 to-white dark:from-slate-900 dark:to-slate-900 border-b border-slate-200/90 dark:border-slate-800 py-2 sm:py-2.5 px-2.5 sm:px-4 flex items-center justify-between gap-2 relative group select-none shrink-0">
-          {!isEditingTitle && (
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                disabled={!canUndo}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUndo?.();
-                }}
-                title="Undo last change (Ctrl+Z)"
-                aria-label="Undo last change"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-35 disabled:pointer-events-none text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <Undo2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden md:inline">Undo</span>
-              </button>
-              <button
-                type="button"
-                disabled={!canRedo}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRedo?.();
-                }}
-                title="Redo last undone change (Ctrl+Y)"
-                aria-label="Redo last undone change"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-35 disabled:pointer-events-none text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <Redo2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden md:inline">Redo</span>
-              </button>
-            </div>
-          )}
-
+        {/* Editable Master Sheet Header: Icon-only Undo/Redo Arrows + Always Centered Title + 3-Dots Column Menu */}
+        <div className="bg-gradient-to-b from-slate-50/90 to-white dark:from-slate-900 dark:to-slate-900 border-b border-slate-200/90 dark:border-slate-800 py-2 sm:py-2.5 px-2.5 sm:px-4 relative group select-none shrink-0">
           {isEditingTitle ? (
             <div className="flex items-center gap-2 w-full max-w-lg mx-auto justify-center">
               <input
@@ -1209,41 +1176,64 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-1 min-w-0">
-              <h1 className={`${adaptive.titleFont} font-extrabold text-slate-900 dark:text-slate-100 font-sans uppercase text-center px-1.5 truncate`}>
-                {currentSheetTitle}
-              </h1>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (titleMenuOpen) {
-                    setTitleMenuOpen(false);
-                  } else {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setTitleMenuPos(clampMenuPosition(rect, 224, 180));
-                    setTitleMenuOpen(true);
-                  }
-                }}
-                title="Sheet Options: Edit Title, Add/Remove Column, Merge/Unmerge Cells"
-                className="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/80 dark:hover:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer shrink-0"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+            <div className="grid grid-cols-[minmax(60px,1fr)_minmax(0,auto)_minmax(60px,1fr)] items-center gap-2 w-full">
+              {/* Left slot: Icon-only Undo & Redo arrows (no text) */}
+              <div className="flex items-center gap-1 justify-self-start">
+                <button
+                  type="button"
+                  disabled={!canUndo || !onUndo}
+                  onClick={() => onUndo?.()}
+                  title="Undo (Ctrl+Z)"
+                  aria-label="Undo"
+                  className="w-7 h-7 rounded-md flex items-center justify-center border border-slate-200/80 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-400 hover:bg-slate-200/80 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/80 dark:disabled:hover:bg-slate-800/80 transition-colors cursor-pointer shrink-0"
+                >
+                  <Undo2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={!canRedo || !onRedo}
+                  onClick={() => onRedo?.()}
+                  title="Redo (Ctrl+Y)"
+                  aria-label="Redo"
+                  className="w-7 h-7 rounded-md flex items-center justify-center border border-slate-200/80 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-400 hover:bg-slate-200/80 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/80 dark:disabled:hover:bg-slate-800/80 transition-colors cursor-pointer shrink-0"
+                >
+                  <Redo2 className="w-4 h-4" />
+                </button>
+              </div>
 
-          {!isEditingTitle && (
-            <div className="hidden sm:flex items-center justify-end gap-1.5 shrink-0 min-w-[68px] md:min-w-[120px]">
-              <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 hidden lg:inline">
-                Arrows · Tab · F2
-              </span>
+              {/* Center slot: Symmetrically centered sheet title + 3-dot options button */}
+              <div className="flex items-center justify-center gap-1 min-w-0 max-w-full">
+                <div className="w-7 h-7 shrink-0" aria-hidden="true" />
+                <h1 className={`${adaptive.titleFont} font-extrabold text-slate-900 dark:text-slate-100 font-sans uppercase text-center px-1.5 truncate`}>
+                  {currentSheetTitle}
+                </h1>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (titleMenuOpen) {
+                      setTitleMenuOpen(false);
+                    } else {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setTitleMenuPos(clampMenuPosition(rect, 224, 180));
+                      setTitleMenuOpen(true);
+                    }
+                  }}
+                  title="Sheet Options: Edit Title, Add/Remove Column, Merge/Unmerge Cells"
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/80 dark:hover:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer shrink-0"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Right slot: Balancing spacer matching left controls width so title stays dead-center */}
+              <div className="w-[60px] justify-self-end shrink-0" aria-hidden="true" />
             </div>
           )}
         </div>
 
-        {/* Sleek Remarks Filter Strip + Quick Settle All Cash Bills */}
-        <div className="bg-slate-50/80 dark:bg-slate-900/95 border-b border-slate-200/80 dark:border-slate-800 px-2.5 sm:px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs select-none shrink-0">
+        {/* Sleek Centered Remarks Filter Strip + Quick Settle All Cash Bills */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/95 border-b border-slate-200/80 dark:border-slate-800 px-2.5 sm:px-4 py-1.5 flex flex-wrap items-center justify-center gap-2 text-[11px] sm:text-xs select-none shrink-0">
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
             <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-0.5">
               <Filter className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />

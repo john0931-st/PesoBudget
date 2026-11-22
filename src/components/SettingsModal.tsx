@@ -7,18 +7,25 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { MonthData, CloudBackupRecord, UserSecurityProfile } from '../types/budget';
+import type { User } from 'firebase/auth';
+import { MonthData, CloudBackupRecord, UserSecurityProfile, TopToastItem } from '../types/budget';
 import {
   getCloudBackups,
   saveSecurityProfile,
 } from '../services/securityService';
 import {
+  beginGoogleSignInPopup,
+  completeGoogleSignInWithOtp,
   createFirebaseBackupSnapshot,
   fetchFirebaseBackups,
-  signInWithFirebaseGoogle,
+  isDeveloperAdminEmail,
+  requestGmailVerificationOtp,
+  setOtpChallengeActive,
   signOutFirebase,
   syncAllMonthsToFirestore,
+  verifyGmailOtpCode,
 } from '../services/firebaseSyncService';
+import type { PublicLinkStatus } from '../hooks/usePublicLinkMonitor';
 import { exportAndroidStudioProjectZip } from '../utils/androidStudioExporter';
 import { exportPortableAppFolderZip } from '../utils/portableBundleExporter';
 import {
@@ -56,6 +63,7 @@ import {
   CheckCircle2,
   Smartphone,
   ShieldCheck,
+  ShieldAlert,
   LogIn,
   LogOut,
   RefreshCw,
@@ -72,6 +80,9 @@ import {
   EyeOff,
   KeyRound,
   BookOpen,
+  MailCheck,
+  Compass,
+  Activity,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -88,6 +99,11 @@ interface SettingsModalProps {
   connectedFolderName?: string | null;
   onConnectedFolderChange?: (folderName: string | null) => void;
   onRestoreFolderData?: (loaded: LoadedFolderDatabase) => void;
+  onOpenAdmin?: () => void;
+  onReplayTour?: () => void;
+  linkStatus?: PublicLinkStatus;
+  onCheckPublicLink?: (forceToast?: boolean) => Promise<void>;
+  onEmitToast?: (toast: Omit<TopToastItem, 'id'>) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -104,12 +120,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   connectedFolderName = null,
   onConnectedFolderChange,
   onRestoreFolderData,
+  onOpenAdmin,
+  onReplayTour,
+  linkStatus,
+  onCheckPublicLink,
+  onEmitToast,
 }) => {
   const [backups, setBackups] = useState<CloudBackupRecord[]>(() => getCloudBackups());
   const [feedback, setFeedback] = useState<{ type: 'success' | 'info'; text: string } | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [pendingOtpUser, setPendingOtpUser] = useState<User | null>(null);
+  const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
+  const [otpInputCode, setOtpInputCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [isLoadingCloudBackups, setIsLoadingCloudBackups] = useState(false);
   const [isExportingAndroid, setIsExportingAndroid] = useState(false);
   const [isExportingPortable, setIsExportingPortable] = useState(false);
@@ -154,7 +181,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Load real Firestore backup snapshots when modal opens while signed in and online
   useEffect(() => {
-    if (!isOpen || !firebaseUid || !isOnline) return;
+    if (!isOpen || !firebaseUid || !isOnline || !securityProfile.isAuthenticated) return;
     let active = true;
     setIsLoadingCloudBackups(true);
     fetchFirebaseBackups(firebaseUid)
@@ -172,13 +199,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => {
       active = false;
     };
-  }, [isOpen, firebaseUid, isOnline]);
+  }, [isOpen, firebaseUid, isOnline, securityProfile.isAuthenticated]);
 
   if (!isOpen) return null;
 
-  // Logged-in account on Firebase Auth
-  const isLoggedIn = Boolean(firebaseUid && securityProfile.isAuthenticated && securityProfile.email?.trim());
+  // Logged-in account on Firebase Auth (only true after Gmail OTP verification succeeds)
+  const isLoggedIn = Boolean(
+    firebaseUid &&
+      securityProfile.isAuthenticated &&
+      securityProfile.email?.trim() &&
+      !pendingOtpUser
+  );
   const loggedInEmail = isLoggedIn ? securityProfile.email.trim() : '';
+  const isDeveloperAdmin = isLoggedIn && isDeveloperAdminEmail(loggedInEmail);
   const totalMonthsCount = Object.keys(months).length;
 
   const getActiveLockMeta = (): PortableLockMetadata | null => {
@@ -210,46 +243,158 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!isOnline) {
       setFeedback({
         type: 'info',
-        text: 'Please go Online first to sign in with Google and sync with Firebase.',
+        text: 'Please go Online first to sign in with Google and verify your Gmail code.',
       });
       return;
     }
     setIsAuthenticating(true);
+    setOtpError(null);
     try {
-      const user = await signInWithFirebaseGoogle();
-      const updatedProfile: UserSecurityProfile = {
-        ...securityProfile,
-        isAuthenticated: true,
-        email: user.email || '',
-        name: user.displayName || (user.email ? user.email.split('@')[0] : 'Google User'),
-        picture: user.photoURL || '',
-        isSessionUnlocked: true,
-        isEmailVerified: user.emailVerified,
-        backupSyncStatus: 'synced',
-      };
-      saveSecurityProfile(updatedProfile);
-      onUpdateSecurityProfile(updatedProfile);
-      const cloudList = await fetchFirebaseBackups(user.uid);
-      setBackups(cloudList);
+      const user = await beginGoogleSignInPopup();
+      const targetEmail = user.email?.trim();
+      if (!targetEmail) {
+        await signOutFirebase();
+        throw new Error('Selected Google account has no email address.');
+      }
+      const otpDispatch = await requestGmailVerificationOtp(
+        targetEmail,
+        user.displayName || undefined
+      );
+      setPendingOtpUser(user);
+      setOtpMaskedEmail(otpDispatch.maskedEmail);
+      setOtpInputCode('');
       setFeedback({
-        type: 'success',
-        text: `Signed in as ${user.email}. Cloud backup & live sync are connected to Firebase.`,
+        type: 'info',
+        text: `Verification code sent to ${otpDispatch.maskedEmail}. Enter the 6-digit code below to complete sign-in.`,
+      });
+      onEmitToast?.({
+        type: 'info',
+        title: 'Verification Code Sent',
+        message: `Check ${otpDispatch.maskedEmail} for your 6-digit sign-in code.`,
       });
     } catch (err) {
       console.error(err);
-      setFeedback({
-        type: 'info',
-        text: err instanceof Error ? err.message : 'Google sign-in was cancelled or blocked.',
+      setOtpChallengeActive(false);
+      setPendingOtpUser(null);
+      const msg = err instanceof Error ? err.message : 'Google sign-in was cancelled or blocked.';
+      setFeedback({ type: 'info', text: msg });
+      onEmitToast?.({
+        type: 'error',
+        title: 'Sign-In Verification Issue',
+        message: msg,
       });
     } finally {
       setIsAuthenticating(false);
     }
   };
 
+  const handleVerifyOtpAndCompleteSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingOtpUser?.email) return;
+    const cleanedCode = otpInputCode.trim().replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(cleanedCode)) {
+      setOtpError('Please enter the exact 6-digit numeric code sent to your Gmail.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError(null);
+    try {
+      const { verifiedAt } = await verifyGmailOtpCode(pendingOtpUser.email, cleanedCode);
+      const accessProfile = await completeGoogleSignInWithOtp(pendingOtpUser, verifiedAt);
+
+      const updatedProfile: UserSecurityProfile = {
+        ...securityProfile,
+        isAuthenticated: true,
+        email: pendingOtpUser.email || '',
+        name:
+          pendingOtpUser.displayName ||
+          (pendingOtpUser.email ? pendingOtpUser.email.split('@')[0] : 'Google User'),
+        picture: pendingOtpUser.photoURL || '',
+        isSessionUnlocked: true,
+        isEmailVerified: true,
+        backupSyncStatus: accessProfile.status === 'blocked' ? 'idle' : 'synced',
+        role: accessProfile.role,
+        accessStatus: accessProfile.status,
+        otpVerifiedAt: verifiedAt,
+        firebaseUid: pendingOtpUser.uid,
+      };
+      saveSecurityProfile(updatedProfile);
+      onUpdateSecurityProfile(updatedProfile);
+
+      const signedUid = pendingOtpUser.uid;
+      const signedEmail = pendingOtpUser.email || '';
+      setPendingOtpUser(null);
+      setOtpInputCode('');
+
+      if (accessProfile.status !== 'blocked') {
+        const cloudList = await fetchFirebaseBackups(signedUid);
+        setBackups(cloudList);
+      }
+
+      const successMsg =
+        accessProfile.status === 'blocked'
+          ? `Signed in as ${signedEmail}, but this account is currently blocked from cloud sync.`
+          : `Gmail verified! Signed in as ${signedEmail}.`;
+      setFeedback({
+        type: accessProfile.status === 'blocked' ? 'info' : 'success',
+        text: successMsg,
+      });
+      onEmitToast?.({
+        type: accessProfile.status === 'blocked' ? 'warning' : 'success',
+        title: 'Gmail Verified',
+        message: successMsg,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Invalid verification code.';
+      setOtpError(msg);
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!pendingOtpUser?.email) return;
+    setIsResendingOtp(true);
+    setOtpError(null);
+    try {
+      const otpDispatch = await requestGmailVerificationOtp(
+        pendingOtpUser.email,
+        pendingOtpUser.displayName || undefined
+      );
+      setOtpMaskedEmail(otpDispatch.maskedEmail);
+      onEmitToast?.({
+        type: 'info',
+        title: 'New Code Sent',
+        message: `A fresh 6-digit code was sent to ${otpDispatch.maskedEmail}.`,
+      });
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Failed to resend verification code.');
+    } finally {
+      setIsResendingOtp(false);
+    }
+  };
+
+  const handleCancelOtpVerification = async () => {
+    setPendingOtpUser(null);
+    setOtpInputCode('');
+    setOtpError(null);
+    try {
+      await signOutFirebase();
+    } catch {
+      // ignore sign-out error on cancel
+    }
+    setFeedback({
+      type: 'info',
+      text: 'Google Sign-In cancelled before completing Gmail code verification.',
+    });
+  };
+
   const handleSignOut = async () => {
     setIsAuthenticating(true);
     try {
       await signOutFirebase();
+      setPendingOtpUser(null);
       const updated: UserSecurityProfile = {
         ...securityProfile,
         isAuthenticated: false,
@@ -258,12 +403,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         picture: '',
         isEmailVerified: false,
         backupSyncStatus: 'idle',
+        role: undefined,
+        accessStatus: undefined,
+        otpVerifiedAt: undefined,
+        firebaseUid: undefined,
       };
       saveSecurityProfile(updated);
       onUpdateSecurityProfile(updated);
       setFeedback({
         type: 'info',
-        text: 'Signed out of Google / Firebase. Sign in anytime to resume cloud sync.',
+        text: 'Signed out of Google / Firebase. Sign in anytime with Gmail code verification.',
       });
     } catch (err) {
       console.error(err);
@@ -1109,10 +1258,75 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* 1. Logged-In Firebase Google Account Card */}
+          {/* 1. Logged-In Firebase Google Account Card (with 2-Step Gmail OTP Verification) */}
           <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 space-y-3">
-            {isLoggedIn ? (
-              <div className="flex items-center justify-between gap-3">
+            {pendingOtpUser ? (
+              <form onSubmit={handleVerifyOtpAndCompleteSignIn} className="space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 flex items-center justify-center text-emerald-700 dark:text-emerald-300 shrink-0">
+                    <MailCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs lg:text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Enter 6-Digit Gmail Verification Code
+                    </div>
+                    <p className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                      Sent to <strong className="font-mono">{otpMaskedEmail || pendingOtpUser.email}</strong>. Verification is required before enabling Google Cloud Sync.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoFocus
+                    value={otpInputCode}
+                    onChange={(e) => {
+                      setOtpInputCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      if (otpError) setOtpError(null);
+                    }}
+                    placeholder="000000"
+                    className="sm:w-44 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm font-mono font-bold tracking-[0.35em] text-center text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="submit"
+                      disabled={isVerifyingOtp || otpInputCode.trim().length !== 6}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs lg:text-sm font-bold rounded-md cursor-pointer transition-colors"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{isVerifyingOtp ? 'Verifying...' : 'Verify Code'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isResendingOtp || isVerifyingOtp}
+                      onClick={handleResendOtp}
+                      className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-semibold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-md cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isResendingOtp ? 'animate-spin' : ''}`} />
+                      <span>{isResendingOtp ? 'Sending...' : 'Resend'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isVerifyingOtp}
+                      onClick={handleCancelOtpVerification}
+                      className="px-2.5 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                {otpError && (
+                  <p className="text-[11px] lg:text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    {otpError}
+                  </p>
+                )}
+              </form>
+            ) : isLoggedIn ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 flex items-center justify-center shadow-2xs shrink-0 overflow-hidden">
                     {securityProfile.picture ? (
@@ -1129,22 +1343,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs lg:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                         {loggedInEmail}
                       </span>
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] lg:text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shrink-0">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                        Firebase Synced
-                      </span>
+                      {securityProfile.accessStatus === 'blocked' ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] lg:text-xs font-semibold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700 shrink-0">
+                          <ShieldAlert className="w-3 h-3" />
+                          Blocked
+                        </span>
+                      ) : securityProfile.accessStatus === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] lg:text-xs font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shrink-0">
+                          <ShieldAlert className="w-3 h-3" />
+                          Pending Permission
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] lg:text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shrink-0">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          Verified &amp; Synced
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[11px] lg:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       <Smartphone className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                      <span>Real-time cross-device sync active</span>
+                      <span>
+                        {securityProfile.accessStatus === 'blocked'
+                          ? 'Cloud sync disabled by administrator'
+                          : 'Gmail OTP verified · cross-device sync active'}
+                      </span>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  {isDeveloperAdmin && onOpenAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenAdmin();
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] lg:text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 rounded cursor-pointer shadow-xs transition-colors"
+                      title="Open Developer Admin Console"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Admin</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={isAuthenticating}
@@ -1171,10 +1415,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <UserCircle2 className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs lg:text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Sign in with Google for Firebase Cloud Sync
+                      Sign in with Google (Gmail Code Verification)
                     </div>
                     <p className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">
-                      Connect your Google account so backups and sheet edits sync across devices.
+                      Sends a 6-digit verification code to your Gmail before connecting Firebase Cloud Sync.
                     </p>
                   </div>
                 </div>
@@ -1185,7 +1429,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs lg:text-sm font-bold rounded-md cursor-pointer transition-colors shrink-0 disabled:opacity-50"
                 >
                   <LogIn className="w-3.5 h-3.5 text-emerald-400 dark:text-white" />
-                  <span>{isAuthenticating ? 'Signing in...' : 'Sign in with Google'}</span>
+                  <span>{isAuthenticating ? 'Sending Code...' : 'Sign in with Google'}</span>
                 </button>
               </div>
             )}
@@ -1628,6 +1872,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Download className="w-3.5 h-3.5 shrink-0" />
               <span>Download Manual (PDF)</span>
             </button>
+          </div>
+
+          {/* 2E. Guided Onboarding Tour & Background Public Link Health */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {onReplayTour && (
+              <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs lg:text-sm">
+                    <Compass className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Interactive Welcome Tour</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                    Walk through key shortcuts, offline sync, and dynamic category renaming.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onReplayTour();
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-md cursor-pointer shrink-0 transition-colors"
+                >
+                  Replay Tour
+                </button>
+              </div>
+            )}
+
+            {onCheckPublicLink && (
+              <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs lg:text-sm">
+                    <Activity className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Public Link Monitor</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug truncate">
+                    {linkStatus?.state === 'healthy'
+                      ? `Online (${linkStatus.latencyMs ?? 0} ms)`
+                      : linkStatus?.state === 'checking'
+                      ? 'Checking public link...'
+                      : linkStatus?.detail || 'Monitored automatically in background'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void onCheckPublicLink(true);
+                  }}
+                  disabled={linkStatus?.state === 'checking'}
+                  className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-md cursor-pointer shrink-0 transition-colors"
+                >
+                  {linkStatus?.state === 'checking' ? 'Pinging...' : 'Ping Link'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 3. Backup History & Snapshots */}

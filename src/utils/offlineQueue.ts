@@ -14,6 +14,7 @@ export type OfflineActionType =
   | 'sheet_rename'
   | 'sheet_deleted'
   | 'sheet_delete'
+  | 'sheet_duplicate'
   | 'salary_update'
   | 'label_rename'
   | 'remarks_change'
@@ -60,6 +61,7 @@ const ACTION_LABEL_MAP: Record<OfflineActionType, string> = {
   sheet_rename: 'Sheet Renamed',
   sheet_deleted: 'Sheet Deleted',
   sheet_delete: 'Sheet Deleted',
+  sheet_duplicate: 'Sheet Duplicated',
   salary_update: 'Salary Update',
   label_rename: 'Label Rename',
   remarks_change: 'Remarks Change',

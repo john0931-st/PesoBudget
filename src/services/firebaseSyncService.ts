@@ -21,10 +21,26 @@ import {
   handleFirestoreError,
   OperationType,
 } from '../firebase';
-import type { CloudBackupRecord, MonthData, UserSecurityProfile } from '../types/budget';
+import type {
+  AdminUserRecord,
+  CloudBackupRecord,
+  MonthData,
+  UserAccessStatus,
+  UserRole,
+  UserSecurityProfile,
+} from '../types/budget';
 import { getCloudBackups, saveCloudBackups } from './securityService';
 
-const inFlightProfileEnsure = new Map<string, Promise<void>>();
+export const ADMIN_EMAIL = 'archiejp21@gmail.com';
+
+export function isDeveloperAdminEmail(email?: string | null): boolean {
+  return String(email || '').trim().toLowerCase() === ADMIN_EMAIL;
+}
+
+const inFlightProfileEnsure = new Map<
+  string,
+  Promise<{ role: UserRole; status: UserAccessStatus; otpVerifiedAt?: string }>
+>();
 const inFlightSheetSync = new Map<string, Promise<number>>();
 
 function stripUndefined<T>(value: T): T {
@@ -79,38 +95,172 @@ function sanitizeMonthPayload(month: MonthData, ownerUid: string) {
   return { safeId, payload: base };
 }
 
-export async function signInWithFirebaseGoogle(): Promise<User> {
+const OTP_VERIFIED_EMAIL_KEY = 'pesobudget_otp_verified_email_v1';
+let pendingOtpChallengeActive = false;
+
+export function setOtpChallengeActive(active: boolean): void {
+  pendingOtpChallengeActive = active;
+}
+
+export function isOtpChallengeActive(): boolean {
+  return pendingOtpChallengeActive;
+}
+
+export function markEmailOtpVerifiedLocally(email: string, verifiedAt: string): void {
+  try {
+    localStorage.setItem(
+      OTP_VERIFIED_EMAIL_KEY,
+      JSON.stringify({ email: email.trim().toLowerCase(), verifiedAt })
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function clearLocalEmailOtpVerification(): void {
+  try {
+    localStorage.removeItem(OTP_VERIFIED_EMAIL_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function isEmailOtpVerifiedLocally(email?: string | null): boolean {
+  if (!email) return false;
+  try {
+    const raw = localStorage.getItem(OTP_VERIFIED_EMAIL_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { email?: string; verifiedAt?: string };
+    return (
+      Boolean(parsed.verifiedAt) &&
+      String(parsed.email || '').toLowerCase() === email.trim().toLowerCase()
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Step 1 of strict Google Sign-In: opens the Google chooser popup and retrieves
+ * the Firebase User without completing app session activation until the Gmail OTP succeeds.
+ */
+export async function beginGoogleSignInPopup(): Promise<User> {
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
     throw new Error(
-      'Google Sign-In requires http:// or https://. Run Start-PesoBudget in the folder (or open the web link) when online to enable Firebase sync.'
+      'Google Sign-In requires http:// or https://. Open the web link when online to enable cloud sync.'
     );
   }
-  const credential = await signInWithPopup(auth, googleProvider);
-  await ensureUserProfileDoc(credential.user);
-  return credential.user;
+  setOtpChallengeActive(true);
+  try {
+    const credential = await signInWithPopup(auth, googleProvider);
+    return credential.user;
+  } catch (err) {
+    setOtpChallengeActive(false);
+    throw err;
+  }
+}
+
+/**
+ * Step 2 of strict Google Sign-In: asks the backend server to dispatch a 6-digit
+ * verification code to the user's Gmail inbox.
+ */
+export async function requestGmailVerificationOtp(
+  email: string,
+  name?: string
+): Promise<{ maskedEmail: string; expiresInSeconds: number }> {
+  const res = await fetch('/api/auth/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, name }),
+  });
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    maskedEmail?: string;
+    expiresInSeconds?: number;
+    error?: string;
+  };
+  if (!res.ok || !payload.ok) {
+    throw new Error(payload.error || 'Failed to send verification code to your Gmail.');
+  }
+  return {
+    maskedEmail: payload.maskedEmail || email,
+    expiresInSeconds: payload.expiresInSeconds || 600,
+  };
+}
+
+/**
+ * Step 3 of strict Google Sign-In: submits the 6-digit Gmail OTP entered by the user.
+ */
+export async function verifyGmailOtpCode(
+  email: string,
+  code: string
+): Promise<{ verifiedAt: string; verificationToken: string }> {
+  const res = await fetch('/api/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    verifiedAt?: string;
+    verificationToken?: string;
+    error?: string;
+  };
+  if (!res.ok || !payload.ok || !payload.verifiedAt) {
+    throw new Error(payload.error || 'Invalid verification code.');
+  }
+  return {
+    verifiedAt: payload.verifiedAt,
+    verificationToken: payload.verificationToken || '',
+  };
+}
+
+export async function completeGoogleSignInWithOtp(
+  user: User,
+  otpVerifiedAt: string
+): Promise<{ role: UserRole; status: UserAccessStatus; otpVerifiedAt?: string }> {
+  markEmailOtpVerifiedLocally(user.email || '', otpVerifiedAt);
+  setOtpChallengeActive(false);
+  return ensureUserProfileDoc(user, {
+    autoBackupEnabled: true,
+    autoRestoreEnabled: true,
+    otpVerifiedAt,
+    markLogin: true,
+  });
 }
 
 export async function signOutFirebase(): Promise<void> {
+  setOtpChallengeActive(false);
+  clearLocalEmailOtpVerification();
   await signOut(auth);
 }
 
 export async function ensureUserProfileDoc(
   user: User,
-  prefs?: { autoBackupEnabled?: boolean; autoRestoreEnabled?: boolean }
-): Promise<void> {
-  // Serialize concurrent profile initialization/update calls for the same UID
+  prefs?: {
+    autoBackupEnabled?: boolean;
+    autoRestoreEnabled?: boolean;
+    otpVerifiedAt?: string;
+    markLogin?: boolean;
+  }
+): Promise<{ role: UserRole; status: UserAccessStatus; otpVerifiedAt?: string }> {
   const existingPromise = inFlightProfileEnsure.get(user.uid);
-  if (existingPromise) {
-    await existingPromise;
-    if (!prefs) return;
+  if (existingPromise && !prefs) {
+    return existingPromise;
   }
 
-  const run = (async () => {
+  const run = (async (): Promise<{
+    role: UserRole;
+    status: UserAccessStatus;
+    otpVerifiedAt?: string;
+  }> => {
     const userPath = `users/${user.uid}`;
     const userRef = doc(db, 'users', user.uid);
     const safeEmail = (user.email || '').slice(0, 254);
     const safeName = (user.displayName || safeEmail.split('@')[0] || 'User').slice(0, 120);
     const safePhoto = (user.photoURL || '').slice(0, 500);
+    const adminUser = isDeveloperAdminEmail(safeEmail);
+    const nowIso = new Date().toISOString().slice(0, 40);
 
     let existingSnap;
     try {
@@ -120,63 +270,198 @@ export async function ensureUserProfileDoc(
     }
 
     if (!existingSnap.exists()) {
+      const initialRole: UserRole = adminUser ? 'admin' : 'user';
+      const initialStatus: UserAccessStatus = adminUser ? 'approved' : 'pending';
       const createData: Record<string, unknown> = {
         uid: user.uid,
         email: safeEmail,
         displayName: safeName,
+        role: initialRole,
+        status: initialStatus,
         autoBackupEnabled: prefs?.autoBackupEnabled ?? true,
         autoRestoreEnabled: prefs?.autoRestoreEnabled ?? true,
+        lastLoginAt: nowIso,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       if (safePhoto) createData.photoUrl = safePhoto;
+      if (prefs?.otpVerifiedAt) {
+        createData.otpVerifiedAt = prefs.otpVerifiedAt.slice(0, 40);
+      }
 
       try {
         await setDoc(userRef, createData);
       } catch (err) {
         handleFirestoreError(err, OperationType.CREATE, userPath);
       }
-      return;
+      return {
+        role: initialRole,
+        status: initialStatus,
+        otpVerifiedAt: prefs?.otpVerifiedAt,
+      };
     }
 
     const existingData = existingSnap.data();
+    const resolvedRole: UserRole =
+      existingData.role === 'admin' || adminUser ? 'admin' : 'user';
+    const resolvedStatus: UserAccessStatus =
+      existingData.status === 'blocked'
+        ? 'blocked'
+        : existingData.status === 'approved' || adminUser
+          ? 'approved'
+          : 'pending';
+
     const nextAutoBackup =
       prefs?.autoBackupEnabled ?? (existingData.autoBackupEnabled as boolean) ?? true;
     const nextAutoRestore =
       prefs?.autoRestoreEnabled ?? (existingData.autoRestoreEnabled as boolean) ?? true;
+    const nextOtpVerifiedAt = prefs?.otpVerifiedAt
+      ? prefs.otpVerifiedAt.slice(0, 40)
+      : (existingData.otpVerifiedAt as string | undefined);
 
     const needsUpdate =
       existingData.email !== safeEmail ||
       existingData.displayName !== safeName ||
       (safePhoto && existingData.photoUrl !== safePhoto) ||
       existingData.autoBackupEnabled !== nextAutoBackup ||
-      existingData.autoRestoreEnabled !== nextAutoRestore;
+      existingData.autoRestoreEnabled !== nextAutoRestore ||
+      Boolean(prefs?.otpVerifiedAt && existingData.otpVerifiedAt !== prefs.otpVerifiedAt) ||
+      Boolean(prefs?.markLogin);
 
-    if (!needsUpdate) return;
+    if (needsUpdate) {
+      const updateData: Record<string, unknown> = {
+        email: safeEmail,
+        displayName: safeName,
+        autoBackupEnabled: nextAutoBackup,
+        autoRestoreEnabled: nextAutoRestore,
+        updatedAt: serverTimestamp(),
+      };
+      if (safePhoto) updateData.photoUrl = safePhoto;
+      if (nextOtpVerifiedAt) updateData.otpVerifiedAt = nextOtpVerifiedAt;
+      if (prefs?.markLogin) updateData.lastLoginAt = nowIso;
 
-    const updateData: Record<string, unknown> = {
-      email: safeEmail,
-      displayName: safeName,
-      autoBackupEnabled: nextAutoBackup,
-      autoRestoreEnabled: nextAutoRestore,
-      updatedAt: serverTimestamp(),
-    };
-    if (safePhoto) updateData.photoUrl = safePhoto;
-
-    try {
-      await updateDoc(userRef, updateData);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, userPath);
+      try {
+        await updateDoc(userRef, updateData);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, userPath);
+      }
     }
+
+    return {
+      role: resolvedRole,
+      status: resolvedStatus,
+      otpVerifiedAt: nextOtpVerifiedAt,
+    };
   })();
 
   inFlightProfileEnsure.set(user.uid, run);
   try {
-    await run;
+    return await run;
   } finally {
     if (inFlightProfileEnsure.get(user.uid) === run) {
       inFlightProfileEnsure.delete(user.uid);
     }
+  }
+}
+
+function toIsoString(val: unknown): string | undefined {
+  if (val instanceof Timestamp) return val.toDate().toISOString();
+  if (typeof val === 'string' && val.trim()) return val;
+  return undefined;
+}
+
+export async function fetchUserAccessProfile(uid: string): Promise<AdminUserRecord | null> {
+  const userPath = `users/${uid}`;
+  try {
+    const snap = await getDocFromServer(doc(db, 'users', uid));
+    if (!snap.exists()) return null;
+    const d = snap.data();
+    const email = String(d.email || '');
+    return {
+      uid: String(d.uid || snap.id),
+      email,
+      displayName: String(d.displayName || 'User'),
+      photoUrl: d.photoUrl ? String(d.photoUrl) : undefined,
+      role: d.role === 'admin' || isDeveloperAdminEmail(email) ? 'admin' : 'user',
+      status:
+        d.status === 'blocked'
+          ? 'blocked'
+          : d.status === 'approved' || isDeveloperAdminEmail(email)
+            ? 'approved'
+            : 'pending',
+      otpVerifiedAt: d.otpVerifiedAt ? String(d.otpVerifiedAt) : undefined,
+      lastLoginAt: toIsoString(d.lastLoginAt),
+      createdAt: toIsoString(d.createdAt),
+      updatedAt: toIsoString(d.updatedAt),
+    };
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, userPath);
+  }
+}
+
+export async function fetchAllUsersForAdmin(): Promise<AdminUserRecord[]> {
+  const user = auth.currentUser;
+  if (!user || !isDeveloperAdminEmail(user.email)) {
+    throw new Error('Admin access requires verified developer Gmail authentication.');
+  }
+
+  const usersPath = 'users';
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const list: AdminUserRecord[] = snap.docs.map((docSnap) => {
+      const d = docSnap.data();
+      const email = String(d.email || '');
+      return {
+        uid: String(d.uid || docSnap.id),
+        email,
+        displayName: String(d.displayName || 'User'),
+        photoUrl: d.photoUrl ? String(d.photoUrl) : undefined,
+        role: d.role === 'admin' || isDeveloperAdminEmail(email) ? 'admin' : 'user',
+        status:
+          d.status === 'blocked'
+            ? 'blocked'
+            : d.status === 'approved' || isDeveloperAdminEmail(email)
+              ? 'approved'
+              : 'pending',
+        otpVerifiedAt: d.otpVerifiedAt ? String(d.otpVerifiedAt) : undefined,
+        lastLoginAt: toIsoString(d.lastLoginAt),
+        createdAt: toIsoString(d.createdAt),
+        updatedAt: toIsoString(d.updatedAt),
+      };
+    });
+
+    list.sort((a, b) => {
+      const aTime = new Date(a.lastLoginAt || a.updatedAt || a.createdAt || 0).getTime();
+      const bTime = new Date(b.lastLoginAt || b.updatedAt || b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+    return list;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, usersPath);
+  }
+}
+
+export async function updateUserAccessStatus(
+  targetUid: string,
+  status: UserAccessStatus,
+  role?: UserRole
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !isDeveloperAdminEmail(user.email)) {
+    throw new Error('Only the developer admin can update user access.');
+  }
+  const userPath = `users/${targetUid}`;
+  const updatePayload: Record<string, unknown> = {
+    status,
+    updatedAt: serverTimestamp(),
+  };
+  if (role) {
+    updatePayload.role = role;
+  }
+  try {
+    await updateDoc(doc(db, 'users', targetUid), updatePayload);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, userPath);
   }
 }
 
@@ -199,7 +484,10 @@ export async function syncAllMonthsToFirestore(
       throw new Error('Please sign in with Google before syncing to Firebase.');
     }
 
-    await ensureUserProfileDoc(user);
+    const access = await ensureUserProfileDoc(user);
+    if (access.status === 'blocked') {
+      throw new Error('This account has been blocked from cloud sync by the administrator.');
+    }
 
     const sheetsPath = `users/${uid}/sheets`;
     const sheetsRef = collection(db, 'users', uid, 'sheets');
@@ -255,7 +543,6 @@ export async function syncAllMonthsToFirestore(
       syncedCount++;
     }
 
-    // Delete sheets that were removed locally
     for (const oldId of existingIds) {
       if (!targetIds.has(oldId)) {
         const delPath = `${sheetsPath}/${oldId}`;
@@ -358,10 +645,13 @@ export async function createFirebaseBackupSnapshot(
     throw new Error('Please sign in with Google before saving a Firebase backup.');
   }
 
-  await ensureUserProfileDoc(user, {
+  const access = await ensureUserProfileDoc(user, {
     autoBackupEnabled: profile.autoBackupEnabled ?? true,
     autoRestoreEnabled: profile.autoRestoreEnabled ?? true,
   });
+  if (access.status === 'blocked') {
+    throw new Error('This account has been blocked from cloud sync by the administrator.');
+  }
 
   const backupId = `backup_${Date.now()}`;
   const backupPath = `users/${uid}/backups/${backupId}`;
@@ -408,7 +698,6 @@ export async function createFirebaseBackupSnapshot(
     version: '2026.1',
   };
 
-  // Mirror latest snapshot to local cache too
   const existingLocal = getCloudBackups();
   const updatedLocal = [newBackup, ...existingLocal.slice(0, 9)];
   saveCloudBackups(updatedLocal);

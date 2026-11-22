@@ -62,8 +62,12 @@ const EXACT_FILE_AREAS: Record<string, AreaInfo> = {
   'src/components/CellNotePopover.tsx': { area: 'Cell Notes', category: 'Spreadsheet & Cells' },
   'src/components/ActionMessageModal.tsx': { area: 'Notifications', category: 'UI & Navigation' },
   'src/components/TopNav.tsx': { area: 'Top Navigation', category: 'UI & Navigation' },
+  'src/components/TopToastContainer.tsx': { area: 'Top Toast Notifications', category: 'UI & Navigation' },
+  'src/components/OnboardingTourModal.tsx': { area: 'Interactive Welcome Tour', category: 'User Onboarding' },
+  'src/components/AdminModal.tsx': { area: 'Developer Admin Console', category: 'Admin & Access Control' },
   'src/components/UpdateChangesModal.tsx': { area: 'Update Notice Popup', category: 'Release Notices' },
   'src/App.tsx': { area: 'Main Workspace', category: 'Workspace & Navigation' },
+  'src/main.tsx': { area: 'App Entry & Offline Cache', category: 'PWA & Assets' },
   'src/index.css': { area: 'Global Theme & Layout', category: 'Theme & Visual Design' },
   'src/utils/theme.ts': { area: 'Light & Dark Mode', category: 'Theme & Visual Design' },
   'src/utils/viewport.ts': { area: 'Mobile Safe-Area Bounds', category: 'UI & Navigation' },
@@ -88,9 +92,11 @@ const EXACT_FILE_AREAS: Record<string, AreaInfo> = {
   'src/services/securityService.ts': { area: 'Cloud Backup & Auth', category: 'Security & Auth' },
   'src/hooks/useAutoBackup.ts': { area: 'Auto Cloud Backup', category: 'Cloud & Offline Sync' },
   'src/hooks/useNetworkStatus.ts': { area: 'Online / Offline Monitor', category: 'Cloud & Offline Sync' },
+  'src/hooks/usePublicLinkMonitor.ts': { area: 'Public Link Health Monitor', category: 'Cloud & Offline Sync' },
   'src/hooks/useTrackpadSwipe.ts': { area: 'Swipe Gestures', category: 'UI & Navigation' },
   'src/firebase.ts': { area: 'Firebase Configuration', category: 'Cloud & Offline Sync' },
   'src/types/budget.ts': { area: 'Budget Data Model', category: 'Formulas & Editing' },
+  'server.ts': { area: 'Backend OTP & Health Server', category: 'Security & Auth' },
   'index.html': { area: 'App Shell & Metadata', category: 'PWA & Assets' },
   'package.json': { area: 'App Package & Version', category: 'App Configuration' },
 };
@@ -152,6 +158,7 @@ export function computeSourceBuildId(rootDir: string): string {
   const hash = crypto.createHash('sha256');
   const targets = [
     path.resolve(rootDir, 'src'),
+    path.resolve(rootDir, 'server.ts'),
     path.resolve(rootDir, 'index.html'),
     path.resolve(rootDir, 'public'),
   ];
@@ -162,17 +169,6 @@ export function computeSourceBuildId(rootDir: string): string {
       hash.update('\0');
       hash.update(fs.readFileSync(filePath));
       hash.update('\0');
-    }
-  }
-  const pkgPath = path.resolve(rootDir, 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
-      if (pkg.version) {
-        hash.update(`package.version:${pkg.version}\0`);
-      }
-    } catch {
-      // ignore malformed package.json
     }
   }
   return `pb-${hash.digest('hex').slice(0, 12)}`;
@@ -586,6 +582,9 @@ export function resolveAutoReleaseState(
 
   // Fast idempotent return when source code hasn't changed since last recorded release
   if (state && state.releases[0]?.buildId === buildId) {
+    if (shouldPersist) {
+      syncPackageAndReadmeMetadata(rootDir, state.releases[0], state.releases);
+    }
     return {
       latest: state.releases[0],
       history: state.releases,
@@ -624,6 +623,7 @@ export function resolveAutoReleaseState(
         baselineTextsGzip: compressTexts(currentSnapshot.texts),
       };
       fs.writeFileSync(historyFilePath, JSON.stringify(nextState, null, 2), 'utf8');
+      syncPackageAndReadmeMetadata(rootDir, initialRelease, releases);
     }
     return { latest: initialRelease, history: releases };
   }
@@ -738,7 +738,65 @@ export function resolveAutoReleaseState(
       baselineTextsGzip: compressTexts(newTexts),
     };
     fs.writeFileSync(historyFilePath, JSON.stringify(nextState, null, 2), 'utf8');
+    syncPackageAndReadmeMetadata(rootDir, newRelease, releases);
   }
 
   return { latest: newRelease, history: releases };
+}
+
+function syncPackageAndReadmeMetadata(
+  rootDir: string,
+  latest: AutoReleaseEntry,
+  history: AutoReleaseEntry[]
+): void {
+  // 1. Keep package.json version synchronized automatically with latest computed version
+  const pkgPath = path.resolve(rootDir, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const rawPkg = fs.readFileSync(pkgPath, 'utf8');
+      const parsedPkg = JSON.parse(rawPkg) as { version?: string; [k: string]: unknown };
+      if (parsedPkg.version !== latest.version) {
+        parsedPkg.version = latest.version;
+        fs.writeFileSync(pkgPath, `${JSON.stringify(parsedPkg, null, 2)}\n`, 'utf8');
+      }
+    } catch {
+      // ignore package.json write errors
+    }
+  }
+
+  // 2. Keep README.md Auto-Release section synchronized automatically whenever changes build
+  const readmePath = path.resolve(rootDir, 'README.md');
+  if (fs.existsSync(readmePath)) {
+    try {
+      const startMarker = '<!-- AUTO-RELEASE-START -->';
+      const endMarker = '<!-- AUTO-RELEASE-END -->';
+      const rawReadme = fs.readFileSync(readmePath, 'utf8');
+      const startIdx = rawReadme.indexOf(startMarker);
+      const endIdx = rawReadme.indexOf(endMarker);
+
+      const recentLines = history
+        .slice(0, 4)
+        .map(
+          (rel) =>
+            `- **v${rel.version}** (${rel.date}${rel.timeLabel ? ` · ${rel.timeLabel}` : ''}) — **${rel.title}**\n` +
+            rel.changes.slice(0, 4).map((c) => `  - ${c}`).join('\n')
+        )
+        .join('\n');
+
+      const generatedBlock = `${startMarker}\n**Current Version:** \`v${latest.version}\` (${latest.date}${latest.timeLabel ? ` · ${latest.timeLabel}` : ''}) — *${latest.title}*\n\n${recentLines}\n${endMarker}`;
+
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        const currentSlice = rawReadme.slice(startIdx, endIdx + endMarker.length);
+        if (currentSlice !== generatedBlock) {
+          const updatedReadme =
+            rawReadme.slice(0, startIdx) +
+            generatedBlock +
+            rawReadme.slice(endIdx + endMarker.length);
+          fs.writeFileSync(readmePath, updatedReadme, 'utf8');
+        }
+      }
+    } catch {
+      // ignore README sync errors
+    }
+  }
 }

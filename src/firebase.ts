@@ -1,12 +1,39 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  getDocFromServer,
+  type Firestore,
+} from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// Connect to the provisioned Enterprise/Standard Firestore database ID
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+function createFirestoreInstance(): Firestore {
+  if (typeof window !== 'undefined' && window.location.protocol !== 'file:') {
+    try {
+      return initializeFirestore(
+        app,
+        {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        },
+        firebaseConfig.firestoreDatabaseId
+      );
+    } catch {
+      // Fallback cleanly if Firestore was already initialized in hot reload / secondary window
+    }
+  }
+  return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+
+// Connect to the provisioned Enterprise/Standard Firestore database ID with offline IndexedDB persistence
+export const db = createFirestoreInstance();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -63,16 +90,19 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Validate initial Firestore server connectivity on boot
+// Validate initial Firestore server connectivity on boot only when online
 async function testConnection() {
-  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.protocol === 'file:' || (typeof navigator !== 'undefined' && !navigator.onLine))
+  ) {
     return;
   }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+      console.warn('Firestore initialized in offline cache mode.');
     }
   }
 }

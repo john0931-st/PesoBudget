@@ -1,15 +1,8 @@
 /**
  * @file monthGrouping.ts
  * @description Utility to group and compute 15-day cutoff sheets (e.g., 1-15 and 16-31) into unified monthly reports.
- * 
- * In Philippine payroll and expense tracking, a month is commonly split across two 15-day sheets:
- * - Cutoff 1: 1st to 15th (table title: e.g. "JANUARY")
- * - Cutoff 2: 16th to 30/31st (table title: e.g. "JANUARY")
- * 
- * This utility:
- * 1. Automatically recognizes which sheets belong to the same calendar month.
- * 2. Combines expenses, gross salary, government savings (MP2), and personal savings (GoTyme + Ending Balance).
- * 3. Provides clean aggregations for monthly analytics, KPI cards, and multi-month historical trends.
+ * Dynamically resolves user-customized payment category names (e.g., GoTyme -> MariBank, Lazada -> Shopee, etc.)
+ * across all summaries, charts, and exports.
  */
 
 import { MonthData, RowId } from '../types/budget';
@@ -29,6 +22,17 @@ export interface CutoffSheetSummary {
   withdrawnSum: number;
 }
 
+export interface DynamicRowLabels {
+  metrobank: string;
+  qr_ph: string;
+  total: string;
+  salary: string;
+  balance: string;
+  mp2: string;
+  gotyme: string;
+  lazada: string;
+}
+
 export interface CombinedMonthData {
   monthKey: string;             // e.g. "2026-01"
   displayName: string;          // e.g. "January 2026"
@@ -36,33 +40,34 @@ export interface CombinedMonthData {
   sheetCount: number;           // e.g. 2
   sheets: MonthData[];          // Array of sheets belonging to this month
   cutoffSummaries: CutoffSheetSummary[];
-  
+  rowLabels: DynamicRowLabels;  // Live user-renamed labels from the sheet rows
+
   // Aggregated totals across all 15-day sheets in this month
   totalExpenses: number;
   plannedMetrobank: number;     // Physical ATM cash for cash bills
-  plannedQrPh: number;          // Digital payment for Lazada
-  actualTotalWithdrawn: number; // Metrobank ATM + QR PH total outflow
-  actualMetroCash: number;      // Metrobank actual withdrawn money
-  actualQrPayment: number;      // QR PH digital payment amount
-  governmentSavings: number;    // MP2 sum across all sheets
-  gotymeVal: number;            // GoTyme sum across all sheets
+  plannedQrPh: number;          // Digital payment channel
+  actualTotalWithdrawn: number; // ATM cash + QR PH total outflow
+  actualMetroCash: number;      // Bank actual withdrawn money
+  actualQrPayment: number;      // Digital payment amount
+  governmentSavings: number;    // MP2 (or renamed) sum across all sheets
+  gotymeVal: number;            // Withdrawable bank savings (e.g. GoTyme/MariBank) sum
   balanceVal: number;           // Final ending balance of the latest cutoff sheet
   personalSavings: number;      // gotymeVal + balanceVal
   totalCombinedSavings: number; // governmentSavings + personalSavings
   salaryVal: number;            // Gross salary earned in this month
-  
+
   // Bill settlement statistics
   settledAmount: number;
   settledCount: number;
   nextPayrollAmount: number;
   nextPayrollCount: number;
   settlementPercent: number;
-  
+
   // Savings rates
   savingsRate: number;
   govSavingsRate: number;
   personalSavingsRate: number;
-  
+
   // Combined breakdown per category
   expenseCategories: {
     id: string;
@@ -82,6 +87,55 @@ const MONTH_SHORT = [
   'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
 ];
 
+const CUSTOM_ROW_COLORS = [
+  '#14b8a6',
+  '#f43f5e',
+  '#a855f7',
+  '#0ea5e9',
+  '#84cc16',
+  '#eab308',
+  '#f97316',
+  '#ec4899',
+];
+
+function cleanRowLabel(raw: string | undefined, fallback: string): string {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return fallback;
+  return trimmed;
+}
+
+export function extractDynamicRowLabels(
+  sheets: MonthData[],
+  preferredSheet?: MonthData
+): DynamicRowLabels {
+  const ordered = [...sheets].sort((a, b) =>
+    (a.updatedAt || '').localeCompare(b.updatedAt || '')
+  );
+  const latestUpdated = preferredSheet || ordered[ordered.length - 1];
+
+  const resolve = (rowId: string, fallback: string): string => {
+    if (latestUpdated?.rows?.[rowId]?.label?.trim()) {
+      return cleanRowLabel(latestUpdated.rows[rowId].label, fallback);
+    }
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      const lbl = ordered[i]?.rows?.[rowId]?.label;
+      if (lbl && lbl.trim()) return lbl.trim();
+    }
+    return fallback;
+  };
+
+  return {
+    metrobank: resolve('metrobank', 'Metrobank'),
+    qr_ph: resolve('qr_ph', 'QR PH'),
+    total: resolve('total', 'Total'),
+    salary: resolve('salary', 'SALARY'),
+    balance: resolve('balance', 'BALANCE'),
+    mp2: resolve('mp2', 'MP2'),
+    gotyme: resolve('gotyme', 'GoTyme'),
+    lazada: resolve('lazada', 'Lazada'),
+  };
+}
+
 /**
  * Extracts a normalized month key (e.g., "2026-01") and human display title from a MonthData object.
  */
@@ -94,17 +148,14 @@ export function extractMonthKey(sheet: MonthData): {
   cutoffLabel: string;
 } {
   const combinedText = `${sheet.name} ${sheet.sheetTitle || ''} ${sheet.id}`.toLowerCase();
-  
-  // Detect year (prefer explicit sheet.year, then regex 2020 - 2035, default 2026)
+
   const yearMatch = combinedText.match(/\b(202[0-9]|203[0-5])\b/);
   const year = sheet.year || (yearMatch ? parseInt(yearMatch[1], 10) : 2026);
-  
-  // Detect month
+
   let monthIndex = -1;
   for (let i = 0; i < 12; i++) {
     const full = MONTH_NAMES[i];
     const short = MONTH_SHORT[i];
-    // Check word boundaries
     const regex = new RegExp(`\\b(${full}|${short})\\b`, 'i');
     if (regex.test(combinedText)) {
       monthIndex = i;
@@ -112,7 +163,6 @@ export function extractMonthKey(sheet: MonthData): {
     }
   }
 
-  // Fallback to sheet id if format is YYYY-MM
   if (monthIndex === -1) {
     const idMatch = sheet.id.match(/(\d{4})-(\d{2})/);
     if (idMatch) {
@@ -120,7 +170,6 @@ export function extractMonthKey(sheet: MonthData): {
     }
   }
 
-  // If still not found, default to October (index 9)
   if (monthIndex < 0 || monthIndex > 11) {
     monthIndex = 9;
   }
@@ -131,7 +180,6 @@ export function extractMonthKey(sheet: MonthData): {
   const displayName = `${monthCap} ${year}`;
   const tableTitle = sheet.sheetTitle?.trim() || monthCap.toUpperCase();
 
-  // Detect cutoff
   let cutoffLabel = 'Full Period';
   if (/1\s*[-–toTO]+\s*15|1st|first/i.test(sheet.name)) {
     cutoffLabel = '1st Cutoff (1st–15th)';
@@ -150,7 +198,7 @@ export function extractMonthKey(sheet: MonthData): {
 }
 
 /**
- * Standard expense categories to summarize in charts.
+ * Standard expense categories to summarize in charts (overridden dynamically when renamed in sheet).
  */
 export const STANDARD_EXPENSE_CATEGORIES = [
   { id: 'rent', label: 'Rent', color: '#3b82f6' },
@@ -171,7 +219,8 @@ export function computeCombinedMonthData(
   monthKey: string,
   displayName: string,
   tableTitle: string,
-  sheets: MonthData[]
+  sheets: MonthData[],
+  preferredSheet?: MonthData
 ): CombinedMonthData {
   let totalExpenses = 0;
   let plannedMetrobank = 0;
@@ -182,21 +231,23 @@ export function computeCombinedMonthData(
   let governmentSavings = 0;
   let gotymeVal = 0;
   let salaryVal = 0;
-  
+
   let settledAmount = 0;
   let settledCount = 0;
   let nextPayrollAmount = 0;
   let nextPayrollCount = 0;
 
-  // Category amounts map
   const categoryAmountMap: Record<string, number> = {};
+  const categoryLabelMap: Record<string, string> = {};
+  const customCategoryOrder: string[] = [];
+
   STANDARD_EXPENSE_CATEGORIES.forEach((cat) => {
     categoryAmountMap[cat.id] = 0;
+    categoryLabelMap[cat.id] = cat.label;
   });
 
   const cutoffSummaries: CutoffSheetSummary[] = [];
 
-  // Sort sheets chronologically (1st cutoff before 2nd cutoff)
   const sortedSheets = [...sheets].sort((a, b) => {
     const aIs1st = /1\s*[-–toTO]+\s*15|1st|first/i.test(a.name);
     const bIs1st = /1\s*[-–toTO]+\s*15|1st|first/i.test(b.name);
@@ -209,16 +260,19 @@ export function computeCombinedMonthData(
     const rows = sheet.rows;
     const { cutoffLabel } = extractMonthKey(sheet);
 
-    // Prefer cutoff15th or monthly depending on sheet setup
     let sheetExp = 0;
     STANDARD_EXPENSE_CATEGORIES.forEach((cat) => {
       const row = rows[cat.id as RowId];
       if (row) {
-        const val = (row.cutoff15th?.value || 0) + (row.monthly?.value && !row.cutoff15th?.value ? row.monthly.value : 0);
+        if (row.label && row.label.trim()) {
+          categoryLabelMap[cat.id] = row.label.trim();
+        }
+        const val =
+          (row.cutoff15th?.value || 0) +
+          (row.monthly?.value && !row.cutoff15th?.value ? row.monthly.value : 0);
         categoryAmountMap[cat.id] = (categoryAmountMap[cat.id] || 0) + val;
         sheetExp += val;
 
-        // Check remarks
         if (row.remarks === 'OK' || row.remarks === 'Settled') {
           settledAmount += val;
           settledCount++;
@@ -229,7 +283,7 @@ export function computeCombinedMonthData(
       }
     });
 
-    // Also include custom payment rows added by user (excluding bank subtotals, digital payment channels, and totals)
+    // Aggregate custom expense rows and track their dynamic labels too
     Object.keys(rows).forEach((rId) => {
       if (
         !STANDARD_EXPENSE_CATEGORIES.some((c) => c.id === rId) &&
@@ -237,8 +291,21 @@ export function computeCombinedMonthData(
       ) {
         const customRow = rows[rId];
         if (customRow && customRow.rowType === 'expense') {
-          const val = (customRow.cutoff15th?.value || 0) + (customRow.monthly?.value && !customRow.cutoff15th?.value ? customRow.monthly.value : 0);
+          const val =
+            (customRow.cutoff15th?.value || 0) +
+            (customRow.monthly?.value && !customRow.cutoff15th?.value ? customRow.monthly.value : 0);
           sheetExp += val;
+
+          const normKey =
+            (customRow.label || rId).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || rId;
+          const customCatId = `custom_${normKey}`;
+          if (!(customCatId in categoryAmountMap)) {
+            categoryAmountMap[customCatId] = 0;
+            customCategoryOrder.push(customCatId);
+          }
+          categoryLabelMap[customCatId] = cleanRowLabel(customRow.label, 'Custom Expense');
+          categoryAmountMap[customCatId] += val;
+
           if (customRow.remarks === 'OK' || customRow.remarks === 'Settled') {
             settledAmount += val;
             settledCount++;
@@ -250,7 +317,8 @@ export function computeCombinedMonthData(
       }
     });
 
-    const sheetTotalVal = sheet.rows['total']?.cutoff15th?.value || sheet.rows['total']?.monthly?.value || 0;
+    const sheetTotalVal =
+      sheet.rows['total']?.cutoff15th?.value || sheet.rows['total']?.monthly?.value || 0;
     const finalSheetExp = sheetTotalVal > 0 ? sheetTotalVal : sheetExp;
     totalExpenses += finalSheetExp;
 
@@ -291,25 +359,52 @@ export function computeCombinedMonthData(
     });
   });
 
-  // Final ending liquid balance is from the latest sheet in the month
+  // Apply preferredSheet / most-recent-sheet overrides for category labels
+  if (preferredSheet?.rows) {
+    STANDARD_EXPENSE_CATEGORIES.forEach((cat) => {
+      const preferredLabel = preferredSheet.rows[cat.id]?.label?.trim();
+      if (preferredLabel) {
+        categoryLabelMap[cat.id] = preferredLabel;
+      }
+    });
+  }
+
   const latestSheet = sortedSheets[sortedSheets.length - 1];
   const balanceVal =
-    latestSheet.rows['balance']?.cutoff15th?.value ??
-    latestSheet.rows['balance']?.monthly?.value ??
+    latestSheet?.rows['balance']?.cutoff15th?.value ??
+    latestSheet?.rows['balance']?.monthly?.value ??
     0;
 
   const personalSavings = gotymeVal + balanceVal;
   const totalCombinedSavings = governmentSavings + personalSavings;
 
-  const settlementPercent = totalExpenses > 0 ? Math.round((settledAmount / totalExpenses) * 100) : 0;
-  const savingsRate = salaryVal > 0 ? Math.round((totalCombinedSavings / salaryVal) * 100) : 0;
-  const govSavingsRate = salaryVal > 0 ? Math.round((governmentSavings / salaryVal) * 100) : 0;
-  const personalSavingsRate = salaryVal > 0 ? Math.round((personalSavings / salaryVal) * 100) : 0;
+  const settlementPercent =
+    totalExpenses > 0 ? Math.round((settledAmount / totalExpenses) * 100) : 0;
+  const savingsRate =
+    salaryVal > 0 ? Math.round((totalCombinedSavings / salaryVal) * 100) : 0;
+  const govSavingsRate =
+    salaryVal > 0 ? Math.round((governmentSavings / salaryVal) * 100) : 0;
+  const personalSavingsRate =
+    salaryVal > 0 ? Math.round((personalSavings / salaryVal) * 100) : 0;
 
-  const expenseCategories = STANDARD_EXPENSE_CATEGORIES.map((cat) => ({
-    ...cat,
-    amount: categoryAmountMap[cat.id] || 0,
-  }));
+  const expenseCategories = [
+    ...STANDARD_EXPENSE_CATEGORIES.map((cat) => ({
+      id: cat.id,
+      label: categoryLabelMap[cat.id] || cat.label,
+      color: cat.color,
+      amount: categoryAmountMap[cat.id] || 0,
+    })),
+    ...customCategoryOrder
+      .filter((cid) => (categoryAmountMap[cid] || 0) > 0)
+      .map((cid, idx) => ({
+        id: cid,
+        label: categoryLabelMap[cid] || 'Other',
+        color: CUSTOM_ROW_COLORS[idx % CUSTOM_ROW_COLORS.length],
+        amount: categoryAmountMap[cid] || 0,
+      })),
+  ];
+
+  const rowLabels = extractDynamicRowLabels(sortedSheets, preferredSheet);
 
   return {
     monthKey,
@@ -318,6 +413,7 @@ export function computeCombinedMonthData(
     sheetCount: sheets.length,
     sheets: sortedSheets,
     cutoffSummaries,
+    rowLabels,
     totalExpenses,
     plannedMetrobank,
     plannedQrPh,
@@ -346,7 +442,8 @@ export function computeCombinedMonthData(
  * Groups all workbook sheets by Calendar Month (combining two 15-day sheets into 1 full month).
  */
 export function groupSheetsByCalendarMonth(
-  allMonths: Record<string, MonthData>
+  allMonths: Record<string, MonthData>,
+  preferredSheet?: MonthData
 ): Record<string, CombinedMonthData> {
   const groupedSheets: Record<
     string,
@@ -383,7 +480,8 @@ export function groupSheetsByCalendarMonth(
         g.monthKey,
         g.displayName,
         g.tableTitle,
-        g.sheets
+        g.sheets,
+        preferredSheet
       );
     });
 
@@ -394,21 +492,22 @@ export function groupSheetsByCalendarMonth(
  * Computes unified Overall Summary aggregating ALL months and sheets in the entire workbook.
  */
 export function computeOverallWorkbookData(
-  allMonths: Record<string, MonthData>
+  allMonths: Record<string, MonthData>,
+  preferredSheet?: MonthData
 ): CombinedMonthData {
   const sheetList = Object.values(allMonths);
   if (sheetList.length === 0) {
-    return computeCombinedMonthData('overall', 'All Months', 'OVERALL SUMMARY', []);
+    return computeCombinedMonthData('overall', 'All Months', 'OVERALL SUMMARY', [], preferredSheet);
   }
 
   const combined = computeCombinedMonthData(
     'overall',
     'All Months',
     'OVERALL SUMMARY',
-    sheetList
+    sheetList,
+    preferredSheet
   );
 
-  // Total ending liquid surplus across all sheets
   const sumBalances = sheetList.reduce((acc, s) => {
     const bal = s.rows['balance']?.cutoff15th?.value ?? s.rows['balance']?.monthly?.value ?? 0;
     return acc + bal;
@@ -421,9 +520,10 @@ export function computeOverallWorkbookData(
   if (combined.salaryVal > 0) {
     combined.savingsRate = Math.round((combined.totalCombinedSavings / combined.salaryVal) * 100);
     combined.govSavingsRate = Math.round((combined.governmentSavings / combined.salaryVal) * 100);
-    combined.personalSavingsRate = Math.round((combined.personalSavings / combined.salaryVal) * 100);
+    combined.personalSavingsRate = Math.round(
+      (combined.personalSavings / combined.salaryVal) * 100
+    );
   }
 
   return combined;
 }
-

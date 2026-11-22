@@ -6,30 +6,32 @@
  */
 
 import React, { useState } from 'react';
+import type { User } from 'firebase/auth';
 import {
   CloudUpload,
   Wifi,
   WifiOff,
   CheckCircle2,
-  Clock,
-  Database,
   ArrowRight,
   X,
-  FileSpreadsheet,
   Smartphone,
-  Sparkles,
-  ToggleLeft,
-  ToggleRight,
   ShieldCheck,
   AlertCircle,
+  MailCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { OfflineChangeItem, clearOfflineChanges } from '../utils/offlineQueue';
-import { MonthData, UserSecurityProfile } from '../types/budget';
+import { MonthData, TopToastItem, UserSecurityProfile } from '../types/budget';
 import { saveSecurityProfile } from '../services/securityService';
 import {
+  beginGoogleSignInPopup,
+  completeGoogleSignInWithOtp,
   createFirebaseBackupSnapshot,
-  signInWithFirebaseGoogle,
+  requestGmailVerificationOtp,
+  setOtpChallengeActive,
+  signOutFirebase,
   syncAllMonthsToFirestore,
+  verifyGmailOtpCode,
 } from '../services/firebaseSyncService';
 
 interface SyncOfflineModalProps {
@@ -41,7 +43,10 @@ interface SyncOfflineModalProps {
   securityProfile: UserSecurityProfile;
   firebaseUid?: string | null;
   onUpdateSecurityProfile: (profile: UserSecurityProfile) => void;
+  onMonthsSynchronized?: (syncedMonths: Record<string, MonthData>) => void;
+  onDiscardOfflineAndRestoreCloud?: () => Promise<boolean>;
   onSyncComplete?: (uploadedCount: number) => void;
+  onEmitToast?: (toast: Omit<TopToastItem, 'id'>) => void;
   simulateOffline: boolean;
   onToggleSimulateOffline: () => void;
 }
@@ -55,19 +60,33 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
   securityProfile,
   firebaseUid = null,
   onUpdateSecurityProfile,
+  onMonthsSynchronized,
+  onDiscardOfflineAndRestoreCloud,
   onSyncComplete,
+  onEmitToast,
   simulateOffline,
   onToggleSimulateOffline,
 }) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [syncedCount, setSyncedCount] = useState(0);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [pendingOtpUser, setPendingOtpUser] = useState<User | null>(null);
+  const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
+  const [otpInputCode, setOtpInputCode] = useState('');
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const isLoggedIn = Boolean(firebaseUid && securityProfile.isAuthenticated && securityProfile.email?.trim());
+  const isLoggedIn = Boolean(
+    firebaseUid &&
+      securityProfile.isAuthenticated &&
+      securityProfile.email?.trim() &&
+      !pendingOtpUser
+  );
   const loggedInEmail = isLoggedIn ? securityProfile.email.trim() : '';
   const totalSheets = Object.keys(months).length;
 
@@ -79,20 +98,23 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
     setIsAuthenticating(true);
     setAccountError(null);
     try {
-      const user = await signInWithFirebaseGoogle();
-      const updated: UserSecurityProfile = {
-        ...securityProfile,
-        isAuthenticated: true,
-        email: user.email || '',
-        name: user.displayName || (user.email ? user.email.split('@')[0] : 'Google User'),
-        picture: user.photoURL || '',
-        isSessionUnlocked: true,
-        isEmailVerified: user.emailVerified,
-        backupSyncStatus: 'synced',
-      };
-      saveSecurityProfile(updated);
-      onUpdateSecurityProfile(updated);
+      const user = await beginGoogleSignInPopup();
+      if (!user.email) {
+        await signOutFirebase();
+        throw new Error('Selected Google account has no email address.');
+      }
+      const dispatch = await requestGmailVerificationOtp(user.email, user.displayName || undefined);
+      setPendingOtpUser(user);
+      setOtpMaskedEmail(dispatch.maskedEmail);
+      setOtpInputCode('');
+      onEmitToast?.({
+        type: 'info',
+        title: 'Verification Code Sent',
+        message: `Enter the 6-digit code sent to ${dispatch.maskedEmail}.`,
+      });
     } catch (err) {
+      setOtpChallengeActive(false);
+      setPendingOtpUser(null);
       setAccountError(
         err instanceof Error ? err.message : 'Google sign-in was cancelled or blocked.'
       );
@@ -101,10 +123,56 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
     }
   };
 
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingOtpUser?.email) return;
+    const cleaned = otpInputCode.trim().replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(cleaned)) {
+      setAccountError('Enter the exact 6-digit verification code sent to your Gmail.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setAccountError(null);
+    try {
+      const { verifiedAt } = await verifyGmailOtpCode(pendingOtpUser.email, cleaned);
+      const accessProfile = await completeGoogleSignInWithOtp(pendingOtpUser, verifiedAt);
+      const updated: UserSecurityProfile = {
+        ...securityProfile,
+        isAuthenticated: true,
+        email: pendingOtpUser.email || '',
+        name:
+          pendingOtpUser.displayName ||
+          (pendingOtpUser.email ? pendingOtpUser.email.split('@')[0] : 'Google User'),
+        picture: pendingOtpUser.photoURL || '',
+        isSessionUnlocked: true,
+        isEmailVerified: true,
+        backupSyncStatus: accessProfile.status === 'blocked' ? 'idle' : 'synced',
+        role: accessProfile.role,
+        accessStatus: accessProfile.status,
+        otpVerifiedAt: verifiedAt,
+        firebaseUid: pendingOtpUser.uid,
+      };
+      saveSecurityProfile(updated);
+      onUpdateSecurityProfile(updated);
+      setPendingOtpUser(null);
+      setOtpInputCode('');
+      onEmitToast?.({
+        type: 'success',
+        title: 'Gmail Verified',
+        message: `Verified ${updated.email}. Ready to upload offline changes.`,
+      });
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : 'Verification failed.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
   const handleUploadNow = async () => {
     if (!isOnline) return;
     if (!isLoggedIn || !firebaseUid) {
-      setAccountError('Please sign in with Google before uploading to Firebase.');
+      setAccountError('Please sign in with Google (Gmail code) before uploading to Firebase.');
       return;
     }
 
@@ -116,9 +184,21 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
       const count = offlineChanges.length;
       setSyncedCount(count);
 
-      // Push all updated sheets & create a point-in-time snapshot in Firebase Firestore
-      await syncAllMonthsToFirestore(firebaseUid, months);
-      const { updatedProfile } = await createFirebaseBackupSnapshot(firebaseUid, months, {
+      // Stamp every sheet with a fresh upload timestamp BEFORE pushing so Firestore never reverts to older cloud state
+      const uploadStamp = new Date().toISOString();
+      const stampedMonths: Record<string, MonthData> = {};
+      for (const [id, sheet] of Object.entries(months)) {
+        stampedMonths[id] = {
+          ...sheet,
+          updatedAt: uploadStamp,
+        };
+      }
+
+      // Align local baseline & storage BEFORE clearing the offline queue
+      onMonthsSynchronized?.(stampedMonths);
+
+      await syncAllMonthsToFirestore(firebaseUid, stampedMonths);
+      const { updatedProfile } = await createFirebaseBackupSnapshot(firebaseUid, stampedMonths, {
         ...securityProfile,
         email: loggedInEmail,
       });
@@ -126,26 +206,60 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
       saveSecurityProfile(updatedProfile);
       onUpdateSecurityProfile(updatedProfile);
 
-      // Clear the offline queue
+      // Clear the offline queue after upload and local baseline alignment complete
       clearOfflineChanges();
 
       setUploadSuccess(true);
+      onEmitToast?.({
+        type: 'success',
+        title: 'Offline Changes Uploaded',
+        message: `Uploaded ${count} offline change${count === 1 ? '' : 's'} permanently to Firebase Cloud.`,
+      });
       if (onSyncComplete) {
         onSyncComplete(count);
       }
 
-      // Automatically close after confirmation
       setTimeout(() => {
         setIsUploading(false);
         setUploadSuccess(false);
         onClose();
-      }, 1600);
+      }, 1400);
     } catch (err) {
       console.error('Failed to upload offline changes:', err);
-      setAccountError(
-        err instanceof Error ? err.message : 'Failed to upload changes to Firebase.'
-      );
+      const msg = err instanceof Error ? err.message : 'Failed to upload changes to Firebase.';
+      setAccountError(msg);
+      onEmitToast?.({
+        type: 'error',
+        title: 'Upload Failed',
+        message: msg,
+      });
       setIsUploading(false);
+    }
+  };
+
+  const handleDiscardOffline = async () => {
+    if (!isOnline || !isLoggedIn || !firebaseUid) return;
+    setIsDiscarding(true);
+    setAccountError(null);
+    try {
+      const restored = onDiscardOfflineAndRestoreCloud
+        ? await onDiscardOfflineAndRestoreCloud()
+        : false;
+      clearOfflineChanges();
+      onEmitToast?.({
+        type: 'info',
+        title: restored ? 'Cloud Data Restored' : 'Offline Queue Cleared',
+        message: restored
+          ? 'Skipped uploading offline edits and restored your latest cloud sheets.'
+          : 'Cleared offline upload queue.',
+      });
+      onClose();
+    } catch (err) {
+      setAccountError(
+        err instanceof Error ? err.message : 'Could not discard offline queue cleanly.'
+      );
+    } finally {
+      setIsDiscarding(false);
     }
   };
 
@@ -172,7 +286,7 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
                   {offlineChanges.length > 0
-                    ? 'Upload Offline Changes'
+                    ? 'Upload Offline Changes?'
                     : 'Network & Cloud Sync'}
                 </h3>
                 <span
@@ -195,7 +309,7 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
                   ? offlineChanges.length > 0
                     ? `${offlineChanges.length} modification${
                         offlineChanges.length > 1 ? 's' : ''
-                      } recorded while offline. Ready to sync with your logged-in account.`
+                      } recorded offline. Choose whether to upload your offline edits to cloud now or keep them local.`
                     : 'All workbook changes are synchronized with your device and logged-in account.'
                   : 'You are working offline. All edits and auto-computations are safely saved on your device.'}
               </p>
@@ -215,13 +329,52 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
         <div className="p-4 sm:p-5 overflow-y-auto overscroll-contain space-y-3.5 flex-1 min-h-0">
           {/* Target Cloud Account Banner */}
           <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/90 dark:border-slate-700 rounded-xl p-3 space-y-2 text-xs lg:text-sm">
-            {isLoggedIn ? (
+            {pendingOtpUser ? (
+              <form onSubmit={handleVerifyOtp} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 text-xs">
+                    <MailCheck className="w-4 h-4 shrink-0" />
+                    <span>Enter 6-digit code sent to {otpMaskedEmail}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingOtpUser(null);
+                      setOtpInputCode('');
+                      void signOutFirebase();
+                    }}
+                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otpInputCode}
+                    onChange={(e) => setOtpInputCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 font-mono font-bold tracking-[0.35em] text-center text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={isVerifyingOtp}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isVerifyingOtp ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                </div>
+              </form>
+            ) : isLoggedIn ? (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Smartphone className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
                   <div className="min-w-0">
                     <span className="text-[10px] lg:text-xs uppercase font-bold text-slate-400 dark:text-slate-500 block tracking-wider">
-                      Firebase Target Account (Signed In)
+                      Firebase Target Account (Verified)
                     </span>
                     <span className="font-mono font-semibold text-slate-900 dark:text-slate-100 truncate block">
                       {loggedInEmail}
@@ -246,10 +399,10 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
                   <span className="text-[10px] lg:text-xs uppercase font-bold text-amber-700 dark:text-amber-400 tracking-wider block">
-                    Sign In Target Google Account to Upload
+                    Sign In Target Google Account (Requires Gmail Code)
                   </span>
                   <span className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300">
-                    Connect with Google to upload offline changes to Firebase Cloud.
+                    Verify with a Gmail OTP code to upload offline changes to Firebase Cloud.
                   </span>
                 </div>
                 <button
@@ -258,7 +411,7 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
                   onClick={handleGoogleSignIn}
                   className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:bg-slate-400 dark:disabled:bg-slate-700 text-white text-xs lg:text-sm font-bold rounded-lg cursor-pointer shrink-0"
                 >
-                  {isAuthenticating ? 'Signing in...' : 'Sign in with Google'}
+                  {isAuthenticating ? 'Sending Code...' : 'Sign in with Google'}
                 </button>
               </div>
             )}
@@ -391,51 +544,92 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="p-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
-          <div className="text-[11px] lg:text-xs text-slate-500 dark:text-slate-400 font-mono text-center sm:text-left">
-            {isOnline ? (
-              <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1 justify-center sm:justify-start">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Network connected & ready
-              </span>
-            ) : (
-              <span className="text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1 justify-center sm:justify-start">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Connect to internet to upload
-              </span>
-            )}
-          </div>
+        <div className="p-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 space-y-2 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
+            <div className="text-[11px] lg:text-xs text-slate-500 dark:text-slate-400 font-mono text-center sm:text-left">
+              {isOnline ? (
+                <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1 justify-center sm:justify-start">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Network connected &amp; ready
+                </span>
+              ) : (
+                <span className="text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1 justify-center sm:justify-start">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Connect to internet to upload
+                </span>
+              )}
+            </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isUploading}
-              className="px-3.5 py-2 text-xs lg:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer w-full sm:w-auto"
-            >
-              {uploadSuccess ? 'Close' : 'Dismiss'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+              {offlineChanges.length > 0 && isOnline && onDiscardOfflineAndRestoreCloud && !uploadSuccess && (
+                confirmDiscard ? (
+                  <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl px-2.5 py-1">
+                    <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                      Discard offline edits?
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isDiscarding || isUploading}
+                      onClick={() => {
+                        setConfirmDiscard(false);
+                        void handleDiscardOffline();
+                      }}
+                      className="px-2 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                      {isDiscarding ? 'Restoring...' : 'Confirm'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDiscarding}
+                      onClick={() => setConfirmDiscard(false)}
+                      className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+                    >
+                      Keep
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDiscard(true)}
+                    disabled={isUploading || isDiscarding}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs lg:text-sm font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Discard Offline</span>
+                  </button>
+                )
+              )}
 
-            {offlineChanges.length > 0 && isOnline && (
               <button
                 type="button"
-                onClick={handleUploadNow}
-                disabled={isUploading || uploadSuccess}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white font-bold text-xs lg:text-sm rounded-xl shadow-xs transition-colors cursor-pointer w-full sm:w-auto"
+                onClick={onClose}
+                disabled={isUploading || isDiscarding}
+                className="px-3.5 py-2 text-xs lg:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               >
-                {isUploading ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <>
-                    <CloudUpload className="w-4 h-4" />
-                    <span>Upload & Sync Now ({offlineChanges.length})</span>
-                  </>
-                )}
+                {uploadSuccess ? 'Close' : offlineChanges.length > 0 ? 'Keep Local' : 'Dismiss'}
               </button>
-            )}
+
+              {offlineChanges.length > 0 && isOnline && (
+                <button
+                  type="button"
+                  onClick={handleUploadNow}
+                  disabled={isUploading || isDiscarding || uploadSuccess}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white font-bold text-xs lg:text-sm rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {isUploading ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CloudUpload className="w-4 h-4" />
+                      <span>Upload &amp; Sync Now ({offlineChanges.length})</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

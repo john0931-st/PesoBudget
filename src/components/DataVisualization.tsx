@@ -54,13 +54,13 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
 
   // Group all sheets by calendar month (for the multi-month progression graph)
   const groupedMonths = useMemo(() => {
-    return groupSheetsByCalendarMonth(allMonths);
-  }, [allMonths]);
+    return groupSheetsByCalendarMonth(allMonths, monthData);
+  }, [allMonths, monthData]);
 
   // Unified Overall Summary data aggregating ALL sheets across the entire workbook
   const combinedMonth: CombinedMonthData = useMemo(() => {
     const validMonths = Object.keys(allMonths).length > 0 ? allMonths : { [monthData.id]: monthData };
-    return computeOverallWorkbookData(validMonths);
+    return computeOverallWorkbookData(validMonths, monthData);
   }, [allMonths, monthData]);
 
   // Multi-Month Historical Progression (all calendar months in the workbook)
@@ -192,7 +192,16 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
     sheets,
     tableTitle,
     sheetCount,
+    rowLabels,
   } = combinedMonth;
+
+  const metroLabel = rowLabels.metrobank;
+  const qrLabel = rowLabels.qr_ph;
+  const mp2Label = rowLabels.mp2;
+  const gotymeLabel = rowLabels.gotyme;
+  const salaryLabel = rowLabels.salary;
+  const balanceLabel = rowLabels.balance;
+  const lazadaLabel = rowLabels.lazada;
 
   const gotymeRate = salaryVal > 0 ? Math.round((gotymeVal / salaryVal) * 100) : 0;
 
@@ -327,10 +336,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
               </div>
               <div className="flex items-center gap-1.5 font-mono text-xs lg:text-sm self-start sm:self-auto">
                 <span className="text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-transparent dark:border-emerald-800/60 px-2.5 py-0.5 rounded font-bold">
-                  Ending Balance: {formatPHP(balanceVal)}
+                  Ending {balanceLabel}: {formatPHP(balanceVal)}
                 </span>
                 <span className="text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-transparent dark:border-teal-800/60 px-2.5 py-0.5 rounded font-bold">
-                  GoTyme: {formatPHP(gotymeVal)}
+                  {gotymeLabel}: {formatPHP(gotymeVal)}
                 </span>
               </div>
             </div>
@@ -344,14 +353,14 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   {formatPHP(Math.abs(totalExpenses))}
                 </div>
                 <span className="text-[11px] lg:text-xs text-slate-500 dark:text-slate-400 block truncate">
-                  House, utilities, loans & Lazada
+                  House, utilities, loans & {lazadaLabel}
                 </span>
               </div>
 
               {/* 2. Metrobank Withdrawn Cash */}
               <div className="bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-[11px] lg:text-xs font-semibold text-blue-900 dark:text-blue-200 uppercase tracking-wide">Metrobank</span>
+                  <span className="text-[11px] lg:text-xs font-semibold text-blue-900 dark:text-blue-200 uppercase tracking-wide">{metroLabel}</span>
                   <span className="text-[11px] bg-blue-100 dark:bg-blue-900/70 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-bold shrink-0">
                     ATM Cash
                   </span>
@@ -367,7 +376,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
               {/* 3. QR PH Payment */}
               <div className="bg-purple-50/60 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-[11px] lg:text-xs font-semibold text-purple-900 dark:text-purple-200 uppercase tracking-wide">QR PH</span>
+                  <span className="text-[11px] lg:text-xs font-semibold text-purple-900 dark:text-purple-200 uppercase tracking-wide">{qrLabel}</span>
                   <span className="text-[11px] bg-purple-100 dark:bg-purple-900/70 text-purple-800 dark:text-purple-200 px-1.5 py-0.5 rounded font-bold shrink-0">
                     Payment
                   </span>
@@ -376,14 +385,14 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   {formatPHP(plannedQrPh)}
                 </div>
                 <span className="text-[11px] lg:text-xs text-purple-700 dark:text-purple-300/80 block truncate">
-                  Digital payment for Lazada bill
+                  Digital payment for {lazadaLabel}
                 </span>
               </div>
 
               {/* 4. Gov MP2 */}
               <div className="bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-[11px] lg:text-xs font-semibold text-amber-900 dark:text-amber-200 uppercase tracking-wide">Pag-IBIG MP2</span>
+                  <span className="text-[11px] lg:text-xs font-semibold text-amber-900 dark:text-amber-200 uppercase tracking-wide">{mp2Label}</span>
                   <span className="text-[11px] bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded font-bold shrink-0">
                     Locked
                   </span>
@@ -392,14 +401,14 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   {formatPHP(Math.abs(governmentSavings))}
                 </div>
                 <span className="text-[11px] lg:text-xs text-amber-700 dark:text-amber-300/80 block truncate">
-                  Non-withdrawable · {govSavingsRate}% of salary
+                  Non-withdrawable · {govSavingsRate}% of {salaryLabel}
                 </span>
               </div>
 
               {/* 5. GoTyme (Withdrawable) */}
               <div className="bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/70 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1 col-span-2 sm:col-span-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-[11px] lg:text-xs font-semibold text-teal-900 dark:text-teal-200 uppercase tracking-wide">GoTyme Bank</span>
+                  <span className="text-[11px] lg:text-xs font-semibold text-teal-900 dark:text-teal-200 uppercase tracking-wide">{gotymeLabel}</span>
                   <span className="text-[11px] bg-teal-200 dark:bg-teal-900/70 text-teal-900 dark:text-teal-200 px-1.5 py-0.5 rounded font-bold shrink-0">
                     Withdrawable
                   </span>
@@ -408,7 +417,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   {formatPHP(gotymeVal)}
                 </div>
                 <span className="text-[11px] lg:text-xs text-teal-700 dark:text-teal-300/80 block truncate">
-                  Liquid reserve · Balance: {formatPHP(balanceVal)}
+                  Liquid reserve · {balanceLabel}: {formatPHP(balanceVal)}
                 </span>
               </div>
             </div>
@@ -419,11 +428,11 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 <div className="flex items-center gap-1.5">
                   <PieChart className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-slate-700 dark:text-slate-300" />
                   <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide text-[11px] lg:text-xs xl:text-sm">
-                    Monthly Salary Allocation
+                    Monthly {salaryLabel} Allocation
                   </span>
                 </div>
                 <span className="font-mono text-[11px] lg:text-xs xl:text-sm text-slate-600 dark:text-slate-300">
-                  Gross Salary: <strong className="text-emerald-700 dark:text-emerald-400">{formatPHP(salaryVal)}</strong>
+                  Gross {salaryLabel}: <strong className="text-emerald-700 dark:text-emerald-400">{formatPHP(salaryVal)}</strong>
                 </span>
               </div>
 
@@ -437,17 +446,17 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 <div
                   className="h-full bg-amber-500 transition-all duration-300"
                   style={{ width: `${salaryVal > 0 ? Math.min(100, (Math.abs(governmentSavings) / salaryVal) * 100) : 0}%` }}
-                  title={`MP2 (Locked): ${formatPHP(Math.abs(governmentSavings))}`}
+                  title={`${mp2Label} (Locked): ${formatPHP(Math.abs(governmentSavings))}`}
                 />
                 <div
                   className="h-full bg-teal-500 transition-all duration-300"
                   style={{ width: `${salaryVal > 0 ? Math.min(100, (gotymeVal / salaryVal) * 100) : 0}%` }}
-                  title={`GoTyme (Withdrawable): ${formatPHP(gotymeVal)}`}
+                  title={`${gotymeLabel} (Withdrawable): ${formatPHP(gotymeVal)}`}
                 />
                 <div
                   className="h-full bg-emerald-500 transition-all duration-300"
                   style={{ width: `${salaryVal > 0 ? Math.max(0, (balanceVal / salaryVal) * 100) : 0}%` }}
-                  title={`Ending Balance: ${formatPHP(balanceVal)}`}
+                  title={`Ending ${balanceLabel}: ${formatPHP(balanceVal)}`}
                 />
               </div>
 
@@ -465,14 +474,14 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">MP2 (Locked):</span>
+                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">{mp2Label} (Locked):</span>
                   </div>
                   <span className="font-bold text-amber-700 dark:text-amber-400 shrink-0">{govSavingsRate}%</span>
                 </div>
                 <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">GoTyme:</span>
+                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">{gotymeLabel}:</span>
                   </div>
                   <span className="font-bold text-teal-700 dark:text-teal-400 shrink-0">
                     {gotymeRate}%
@@ -481,7 +490,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">Balance:</span>
+                    <span className="text-slate-600 dark:text-slate-300 font-sans truncate">{balanceLabel}:</span>
                   </div>
                   <span className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{formatPHP(balanceVal)}</span>
                 </div>
@@ -491,11 +500,11 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             {/* Key Figures Strip */}
             <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-4 grid grid-cols-2 sm:grid-cols-4 gap-2 lg:gap-4 font-mono text-xs lg:text-sm shrink-0">
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">Gross Salary:</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">Gross {salaryLabel}:</span>
                 <span className="font-bold text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm lg:text-base">{formatPHP(salaryVal)}</span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">MP2 / GoTyme Rate:</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] lg:text-xs font-sans">{mp2Label} / {gotymeLabel} Rate:</span>
                 <span className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm lg:text-base">{govSavingsRate}% / {gotymeRate}%</span>
               </div>
               <div>
@@ -556,21 +565,21 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                         <span className="font-bold text-rose-700 dark:text-rose-400">{formatPHP(cutoff.expenses)}</span>
                       </div>
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>Gross Salary:</span>
+                        <span>Gross {salaryLabel}:</span>
                         <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatPHP(cutoff.salary)}</span>
                       </div>
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>MP2 (Locked):</span>
+                        <span>{mp2Label} (Locked):</span>
                         <span className="font-bold text-amber-700 dark:text-amber-400">{formatPHP(cutoff.govSavings)}</span>
                       </div>
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>GoTyme (Withdrawable):</span>
+                        <span>{gotymeLabel} (Withdrawable):</span>
                         <span className="font-bold text-teal-700 dark:text-teal-400">
                           {formatPHP(Math.max(0, cutoff.personalSavings - cutoff.endingBalance))}
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>Ending Balance:</span>
+                        <span>Ending {balanceLabel}:</span>
                         <span className="font-bold text-slate-900 dark:text-slate-100">{formatPHP(cutoff.endingBalance)}</span>
                       </div>
                     </div>
@@ -594,19 +603,19 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       <span className="font-black text-rose-800 dark:text-rose-400">{formatPHP(Math.abs(totalExpenses))}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Total Salary:</span>
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Total {salaryLabel}:</span>
                       <span className="font-black text-emerald-800 dark:text-emerald-400">{formatPHP(salaryVal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">MP2 (Locked):</span>
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">{mp2Label} (Locked):</span>
                       <span className="font-black text-amber-800 dark:text-amber-400">{formatPHP(Math.abs(governmentSavings))}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">GoTyme (Withdrawable):</span>
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">{gotymeLabel} (Withdrawable):</span>
                       <span className="font-black text-teal-800 dark:text-teal-400">{formatPHP(gotymeVal)}</span>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-emerald-200 dark:border-emerald-800">
-                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Ending Balance:</span>
+                      <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Ending {balanceLabel}:</span>
                       <span className="font-black text-emerald-950 dark:text-emerald-300 text-xs sm:text-sm lg:text-base">{formatPHP(balanceVal)}</span>
                     </div>
                   </div>
@@ -634,7 +643,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     {tableTitle} - Expense Category Share
                   </h3>
                   <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
-                    Category percentage breakdown (100% = {formatPHP(totalExpenses)}) · Lazada is the bill; QR PH is its payment channel
+                    Category percentage breakdown (100% = {formatPHP(totalExpenses)}) · {lazadaLabel} is the bill; {qrLabel} is its payment channel
                   </p>
                 </div>
                 <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
@@ -806,10 +815,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
               <div className="border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center justify-between shrink-0">
                 <div>
                   <h3 className="text-sm sm:text-base lg:text-lg xl:text-xl font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-                    {tableTitle} - Cash Outflows: Metrobank & QR PH
+                    {tableTitle} - Cash Outflows: {metroLabel} & {qrLabel}
                   </h3>
                   <p className="text-[11px] lg:text-xs xl:text-sm text-slate-500 dark:text-slate-400">
-                    Total obligations = Metrobank (withdrawn money) + QR PH (digital payment for Lazada)
+                    Total obligations = {metroLabel} (withdrawn money) + {qrLabel} (digital payment for {lazadaLabel})
                   </p>
                 </div>
                 <span className="font-mono text-xs lg:text-sm font-bold text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-transparent dark:border-blue-800/60 px-2 py-0.5 rounded">
@@ -826,11 +835,11 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
 
                   <div className="space-y-2 text-xs lg:text-sm font-mono">
                     <div className="flex justify-between p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-                      <span className="text-slate-700 dark:text-slate-300 font-sans font-medium">Metrobank (Withdrawn Money):</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-sans font-medium">{metroLabel} (Withdrawn Money):</span>
                       <strong className="text-blue-700 dark:text-blue-400 text-sm lg:text-base tabular-nums">{formatPHP(plannedMetrobank)}</strong>
                     </div>
                     <div className="flex justify-between p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-                      <span className="text-slate-700 dark:text-slate-300 font-sans font-medium">QR PH (Digital Payment for Lazada):</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-sans font-medium">{qrLabel} (Digital Payment for {lazadaLabel}):</span>
                       <strong className="text-purple-700 dark:text-purple-400 text-sm lg:text-base tabular-nums">{formatPHP(plannedQrPh)}</strong>
                     </div>
                   </div>
@@ -913,20 +922,20 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             </div>
           )}
 
-          {/* CARD 4 (PAGE 5): SAVINGS ALLOCATION (LOCKED MP2 VS WITHDRAWABLE GOTYME) - NO COMBINING */}
+          {/* CARD 4 (PAGE 5): SAVINGS ALLOCATION */}
           {currentCardIndex === 4 && (
             <div className="flex-1 flex flex-col justify-between min-h-0 overflow-y-auto overflow-x-hidden pr-0.5 animate-in fade-in duration-150 w-full">
               <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5 lg:pb-2 flex items-center justify-between shrink-0">
                 <div>
                   <h3 className="text-sm sm:text-base lg:text-lg font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-                    {tableTitle} - Savings Reserves: Locked MP2 vs Withdrawable GoTyme
+                    {tableTitle} - Savings Reserves: Locked {mp2Label} vs Withdrawable {gotymeLabel}
                   </h3>
                   <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
-                    Tracked separately — MP2 is long-term locked while GoTyme is withdrawable anytime
+                    Tracked separately — {mp2Label} is long-term locked while {gotymeLabel} is withdrawable anytime
                   </p>
                 </div>
                 <span className="font-mono text-xs font-bold text-emerald-950 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/70 border border-transparent dark:border-emerald-800 px-2.5 py-0.5 rounded-md">
-                  Balance: {formatPHP(balanceVal)}
+                  {balanceLabel}: {formatPHP(balanceVal)}
                 </span>
               </div>
 
@@ -937,14 +946,13 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 const gotymePct = savingsBase > 0 ? 100 - mp2Pct : 50;
                 return (
                   <div className="my-auto py-1 sm:py-1.5 space-y-2.5 lg:space-y-4">
-                    {/* Comparison Ratio Bar (MP2 vs GoTyme Share) */}
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs lg:text-sm font-semibold">
                         <span className="text-amber-700 dark:text-amber-400">
-                          Pag-IBIG MP2 (Locked): {mp2Pct}%
+                          {mp2Label} (Locked): {mp2Pct}%
                         </span>
                         <span className="text-teal-700 dark:text-teal-400">
-                          GoTyme (Withdrawable): {gotymePct}%
+                          {gotymeLabel} (Withdrawable): {gotymePct}%
                         </span>
                       </div>
                       <div className="w-full h-2.5 lg:h-3 bg-slate-100 dark:bg-slate-950 rounded-full overflow-hidden flex shadow-inner">
@@ -959,15 +967,13 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       </div>
                     </div>
 
-                    {/* Side-by-Side Savings Cards (Strictly Separate) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-4">
-                      {/* Locked Government Savings (MP2) */}
                       <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-3 lg:p-4 space-y-1.5 lg:space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
                             <Landmark className="w-4 h-4 text-amber-700 dark:text-amber-400" />
                             <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-amber-950 dark:text-amber-200 uppercase">
-                              Pag-IBIG MP2
+                              {mp2Label}
                             </span>
                           </div>
                           <span className="text-[11px] lg:text-xs bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 font-bold px-2 py-0.5 rounded-full">
@@ -978,17 +984,16 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                           {formatPHP(mp2Abs)}
                         </div>
                         <div className="text-xs lg:text-sm text-amber-900 dark:text-amber-200/90 bg-white/70 dark:bg-slate-900/70 p-2 lg:p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-800/60 leading-relaxed">
-                          • 5-year maturity sovereign dividend reserve ({govSavingsRate}% of salary). Excluded from liquid cash reserves.
+                          • 5-year maturity sovereign dividend reserve ({govSavingsRate}% of {salaryLabel}). Excluded from liquid cash reserves.
                         </div>
                       </div>
 
-                      {/* Withdrawable Personal Savings (GoTyme) */}
                       <div className="bg-teal-50/80 dark:bg-teal-950/40 border border-teal-300 dark:border-teal-800 rounded-xl p-3 lg:p-4 space-y-1.5 lg:space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
                             <Wallet className="w-4 h-4 text-teal-700 dark:text-teal-400" />
                             <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-teal-950 dark:text-teal-200 uppercase">
-                              GoTyme Savings
+                              {gotymeLabel} Savings
                             </span>
                           </div>
                           <span className="text-[11px] lg:text-xs bg-teal-200 dark:bg-teal-900/70 text-teal-900 dark:text-teal-200 font-bold px-2 py-0.5 rounded-full">
@@ -1000,11 +1005,11 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                         </div>
                         <div className="text-xs lg:text-sm text-teal-900 dark:text-teal-200 bg-white/70 dark:bg-slate-900/70 p-2 lg:p-2.5 rounded-lg border border-teal-200/60 dark:border-teal-800/60 font-mono space-y-0.5">
                           <div className="flex justify-between">
-                            <span>• GoTyme Withdrawable:</span>
+                            <span>• {gotymeLabel} Withdrawable:</span>
                             <span className="font-bold">{formatPHP(gotymeVal)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span>• Ending Carryover Balance:</span>
+                            <span>• Ending Carryover {balanceLabel}:</span>
                             <span className="font-bold">{formatPHP(balanceVal)}</span>
                           </div>
                         </div>
@@ -1015,12 +1020,12 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
               })()}
 
               <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                Locked MP2 maturity savings and withdrawable GoTyme reserves remain strictly separated.
+                Locked {mp2Label} maturity savings and withdrawable {gotymeLabel} reserves remain strictly separated.
               </div>
             </div>
           )}
 
-          {/* CARD 5 (PAGE 6): MONTHLY CASH FLOW WATERFALL - FITTED WHOLE, NO SCROLLBAR */}
+          {/* CARD 5 (PAGE 6): MONTHLY CASH FLOW WATERFALL */}
           {currentCardIndex === 5 && (
             <div className="flex-1 flex flex-col justify-between min-h-0 overflow-y-auto overflow-x-hidden pr-0.5 space-y-1.5 sm:space-y-2 animate-in fade-in duration-150 w-full">
               <div className="border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center justify-between shrink-0">
@@ -1029,27 +1034,24 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     {tableTitle} - Monthly Cash Flow Waterfall
                   </h3>
                   <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400">
-                    Step-by-step capital flow from Gross Salary to Ending Balance
+                    Step-by-step capital flow from Gross {salaryLabel} to Ending {balanceLabel}
                   </p>
                 </div>
                 <span className="font-mono text-xs lg:text-sm font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/70 border border-transparent dark:border-emerald-800 px-2.5 py-0.5 rounded-full">
-                  Ending Balance: {formatPHP(balanceVal)}
+                  Ending {balanceLabel}: {formatPHP(balanceVal)}
                 </span>
               </div>
 
               <div className="my-auto py-1 space-y-2.5 lg:space-y-3">
-                {/* Top Flow Stages */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3">
-                  {/* 1. Gross Salary */}
                   <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[11px] lg:text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">1. Gross Salary</span>
+                    <span className="text-[11px] lg:text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">1. Gross {salaryLabel}</span>
                     <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-emerald-950 dark:text-emerald-200 my-0.5 tabular-nums">
                       {formatPHP(salaryVal)}
                     </div>
                     <span className="text-[11px] lg:text-xs text-emerald-700 dark:text-emerald-400/80">Combined payroll sheets</span>
                   </div>
 
-                  {/* 2. Total Bills */}
                   <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
                     <span className="text-[11px] lg:text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wide">2. Total Bills</span>
                     <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-rose-950 dark:text-rose-200 my-0.5 tabular-nums">
@@ -1058,33 +1060,30 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     <span className="text-[11px] lg:text-xs text-rose-700 dark:text-rose-400/80">Rent, utilities, food & loans</span>
                   </div>
 
-                  {/* 3. Metrobank Cash */}
                   <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[11px] lg:text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wide">3. Metrobank Cash</span>
+                    <span className="text-[11px] lg:text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wide">3. {metroLabel} Cash</span>
                     <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-blue-950 dark:text-blue-200 my-0.5 tabular-nums">
                       {formatPHP(plannedMetrobank)}
                     </div>
                     <span className="text-[11px] lg:text-xs text-blue-700 dark:text-blue-400/80">Withdrawn ATM Cash for bills</span>
                   </div>
 
-                  {/* 4. Pag-IBIG MP2 (Locked) */}
                   <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
-                    <span className="text-[11px] lg:text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wide">4. MP2 (Locked)</span>
+                    <span className="text-[11px] lg:text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wide">4. {mp2Label} (Locked)</span>
                     <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-amber-950 dark:text-amber-200 my-0.5 tabular-nums">
                       {formatPHP(Math.abs(governmentSavings))}
                     </div>
-                    <span className="text-[11px] lg:text-xs text-amber-700 dark:text-amber-400/80">Non-withdrawable 5-yr reserve</span>
+                    <span className="text-[11px] lg:text-xs text-amber-700 dark:text-amber-400/80">Non-withdrawable reserve</span>
                   </div>
                 </div>
 
-                {/* Stage 5 & 6 Split Cards: GoTyme (Withdrawable) & Ending Balance */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-3">
                   <div className="bg-teal-50/85 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl p-3 lg:p-4 space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <Wallet className="w-4 h-4 text-teal-700 dark:text-teal-400" />
                         <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-teal-950 dark:text-teal-200 uppercase tracking-wide">
-                          5. GoTyme Savings
+                          5. {gotymeLabel} Savings
                         </span>
                       </div>
                       <span className="text-[11px] lg:text-xs bg-teal-200 dark:bg-teal-900/70 text-teal-900 dark:text-teal-200 font-bold px-2 py-0.5 rounded-full">
@@ -1095,7 +1094,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       {formatPHP(gotymeVal)}
                     </div>
                     <div className="text-xs text-teal-700/90 dark:text-teal-300/80 font-sans">
-                      Accessible personal savings separate from locked MP2.
+                      Accessible personal savings separate from locked {mp2Label}.
                     </div>
                   </div>
 
@@ -1104,7 +1103,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       <div className="flex items-center gap-1.5">
                         <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                         <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-emerald-950 dark:text-emerald-200 uppercase tracking-wide">
-                          6. Ending Balance
+                          6. Ending {balanceLabel}
                         </span>
                       </div>
                       <span className="text-[11px] lg:text-xs bg-emerald-200 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200 font-bold px-2 py-0.5 rounded-full">
@@ -1115,14 +1114,14 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       {formatPHP(balanceVal)}
                     </div>
                     <div className="text-xs text-emerald-700/90 dark:text-emerald-300/80 font-sans">
-                      Formula: (Salary - Total Bills) - (MP2 + GoTyme)
+                      Formula: ({salaryLabel} - Total Bills) - ({mp2Label} + {gotymeLabel})
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="text-xs lg:text-[13px] text-slate-400 dark:text-slate-500 text-center shrink-0 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                Reconciled waterfall tracks locked MP2, withdrawable GoTyme, and ending balance separately.
+                Reconciled waterfall tracks locked {mp2Label}, withdrawable {gotymeLabel}, and ending {balanceLabel.toLowerCase()} separately.
               </div>
             </div>
           )}

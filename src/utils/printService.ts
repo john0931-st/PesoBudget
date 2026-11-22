@@ -146,8 +146,9 @@ export function downloadBudgetPdf(
   }
 
   if (targetSheet === 'summary') {
-    const combined = computeOverallWorkbookData(ctx.months);
-    const grouped = Object.values(groupSheetsByCalendarMonth(ctx.months));
+    const combined = computeOverallWorkbookData(ctx.months, ctx.currentMonth);
+    const grouped = Object.values(groupSheetsByCalendarMonth(ctx.months, ctx.currentMonth));
+    const rl = combined.rowLabels;
 
     drawHeader(
       'PesoBudget — Overall Financial Summary Report',
@@ -158,14 +159,14 @@ export function downloadBudgetPdf(
       startY: 72,
       head: [['Executive Metric', `Amount (${getActiveCurrencyConfig().code})`, 'Notes']],
       body: [
-        ['Total Gross Salary', formatAsciiPHP(combined.salaryVal), 'Combined salary across sheets'],
-        ['Total Bills / Expenses', formatAsciiPHP(Math.abs(combined.totalExpenses)), 'House, utilities, loans & Lazada'],
-        ['Metrobank ATM Cash', formatAsciiPHP(combined.plannedMetrobank), 'Physical cash for bills'],
-        ['QR PH Digital Transfer', formatAsciiPHP(combined.plannedQrPh), 'Digital/online payments'],
-        ['Pag-IBIG MP2 Savings', formatAsciiPHP(Math.abs(combined.governmentSavings)), 'Government sovereign savings'],
-        ['GoTyme Stash', formatAsciiPHP(combined.gotymeVal), 'Personal liquid bank stash'],
-        ['Net Ending Balance', formatAsciiPHP(combined.balanceVal), 'Total remaining surplus'],
-        ['Personal Savings Total', formatAsciiPHP(combined.personalSavings), 'GoTyme + Ending Balance'],
+        [`Total Gross ${rl.salary}`, formatAsciiPHP(combined.salaryVal), 'Combined salary across sheets'],
+        ['Total Bills / Expenses', formatAsciiPHP(Math.abs(combined.totalExpenses)), `House, utilities, loans & ${rl.lazada}`],
+        [`${rl.metrobank} ATM Cash`, formatAsciiPHP(combined.plannedMetrobank), 'Physical cash for bills'],
+        [`${rl.qr_ph} Digital Transfer`, formatAsciiPHP(combined.plannedQrPh), 'Digital/online payments'],
+        [`${rl.mp2} Savings (Locked)`, formatAsciiPHP(Math.abs(combined.governmentSavings)), 'Long-term locked savings'],
+        [`${rl.gotyme} Stash (Withdrawable)`, formatAsciiPHP(combined.gotymeVal), 'Personal liquid bank stash'],
+        [`Net Ending ${rl.balance}`, formatAsciiPHP(combined.balanceVal), 'Total remaining surplus'],
+        ['Personal Savings Total', formatAsciiPHP(combined.personalSavings), `${rl.gotyme} + Ending ${rl.balance}`],
         ['Grand Combined Savings', formatAsciiPHP(combined.totalCombinedSavings), `Overall savings rate: ${combined.savingsRate}%`],
       ],
       styles: { fontSize: 9, cellPadding: 5 },
@@ -183,7 +184,7 @@ export function downloadBudgetPdf(
 
       autoTable(doc, {
         startY: 72,
-        head: [['Calendar Month', 'Total Bills', 'Salary', 'Pag-IBIG MP2', 'GoTyme', 'Ending Balance']],
+        head: [['Calendar Month', 'Total Bills', rl.salary, `${rl.mp2} (Locked)`, `${rl.gotyme} (Withdrawable)`, `Ending ${rl.balance}`]],
         body: grouped.map((m) => [
           m.displayName,
           formatAsciiPHP(m.totalExpenses),
@@ -225,9 +226,12 @@ export function downloadBudgetPdf(
   sheetsToExport.forEach((sheet, idx) => {
     if (idx > 0) doc.addPage('a4', 'landscape');
     const titleHeader = sheet.sheetTitle || `SALARY MONITORING ${sheet.year || ctx.currentYear}`;
+    const mbLbl = sheet.rows['metrobank']?.label || 'Metrobank';
+    const salLbl = sheet.rows['salary']?.label || 'Salary';
+    const balLbl = sheet.rows['balance']?.label || 'Balance';
     drawHeader(
       `${sheet.name} — ${titleHeader}`,
-      `Generated: ${generatedDate} · Metrobank: ${formatAsciiPHP(sheet.rows['metrobank']?.cutoff15th?.value || 0)} · Salary: ${formatAsciiPHP(sheet.rows['salary']?.cutoff15th?.value || 0)} · Balance: ${formatAsciiPHP(sheet.rows['balance']?.cutoff15th?.value || 0)}`
+      `Generated: ${generatedDate} · ${mbLbl}: ${formatAsciiPHP(sheet.rows['metrobank']?.cutoff15th?.value || 0)} · ${salLbl}: ${formatAsciiPHP(sheet.rows['salary']?.cutoff15th?.value || 0)} · ${balLbl}: ${formatAsciiPHP(sheet.rows['balance']?.cutoff15th?.value || 0)}`
     );
 
     const paymentsLabel = sheet.columnHeaders?.payments || 'PAYMENTS';
@@ -328,8 +332,9 @@ function buildPrintableHtmlDocument(
     `;
   } else if (targetSheet === 'summary') {
     docTitle = 'PesoBudget - Overall Financial Summary';
-    const combined = computeOverallWorkbookData(ctx.months);
-    const grouped = Object.values(groupSheetsByCalendarMonth(ctx.months));
+    const combined = computeOverallWorkbookData(ctx.months, ctx.currentMonth);
+    const grouped = Object.values(groupSheetsByCalendarMonth(ctx.months, ctx.currentMonth));
+    const rl = combined.rowLabels;
 
     bodySections = `
       <div class="sheet-block">
@@ -348,14 +353,14 @@ function buildPrintableHtmlDocument(
             </tr>
           </thead>
           <tbody>
-            <tr><td><strong>Total Gross Salary</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.salaryVal))}</td><td>Combined salary across sheets</td></tr>
-            <tr><td><strong>Total Bills / Expenses</strong></td><td class="num">${escapeHtml(formatHtmlPHP(Math.abs(combined.totalExpenses)))}</td><td>House, utilities, loans &amp; Lazada</td></tr>
-            <tr><td><strong>Metrobank ATM Cash</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.plannedMetrobank))}</td><td>Physical cash for bills</td></tr>
-            <tr><td><strong>QR PH Digital Transfer</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.plannedQrPh))}</td><td>Digital payments</td></tr>
-            <tr><td><strong>Pag-IBIG MP2 Savings</strong></td><td class="num">${escapeHtml(formatHtmlPHP(Math.abs(combined.governmentSavings)))}</td><td>Government sovereign fund</td></tr>
-            <tr><td><strong>GoTyme Stash</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.gotymeVal))}</td><td>Liquid personal reserve</td></tr>
-            <tr class="highlight"><td><strong>Net Ending Balance</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.balanceVal))}</td><td>Remaining balance</td></tr>
-            <tr><td><strong>Personal Savings Total</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.personalSavings))}</td><td>GoTyme + Ending Balance</td></tr>
+            <tr><td><strong>Total Gross ${escapeHtml(rl.salary)}</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.salaryVal))}</td><td>Combined salary across sheets</td></tr>
+            <tr><td><strong>Total Bills / Expenses</strong></td><td class="num">${escapeHtml(formatHtmlPHP(Math.abs(combined.totalExpenses)))}</td><td>House, utilities, loans &amp; ${escapeHtml(rl.lazada)}</td></tr>
+            <tr><td><strong>${escapeHtml(rl.metrobank)} ATM Cash</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.plannedMetrobank))}</td><td>Physical cash for bills</td></tr>
+            <tr><td><strong>${escapeHtml(rl.qr_ph)} Digital Transfer</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.plannedQrPh))}</td><td>Digital payments</td></tr>
+            <tr><td><strong>${escapeHtml(rl.mp2)} (Locked)</strong></td><td class="num">${escapeHtml(formatHtmlPHP(Math.abs(combined.governmentSavings)))}</td><td>Long-term locked savings</td></tr>
+            <tr><td><strong>${escapeHtml(rl.gotyme)} (Withdrawable)</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.gotymeVal))}</td><td>Liquid personal reserve</td></tr>
+            <tr class="highlight"><td><strong>Net Ending ${escapeHtml(rl.balance)}</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.balanceVal))}</td><td>Remaining balance</td></tr>
+            <tr><td><strong>Personal Savings Total</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.personalSavings))}</td><td>${escapeHtml(rl.gotyme)} + Ending ${escapeHtml(rl.balance)}</td></tr>
             <tr class="highlight"><td><strong>Grand Combined Savings</strong></td><td class="num">${escapeHtml(formatHtmlPHP(combined.totalCombinedSavings))}</td><td>Overall savings rate: ${combined.savingsRate}%</td></tr>
           </tbody>
         </table>
@@ -374,10 +379,10 @@ function buildPrintableHtmlDocument(
                   <tr>
                     <th>Calendar Month</th>
                     <th class="num">Total Bills</th>
-                    <th class="num">Salary</th>
-                    <th class="num">Pag-IBIG MP2</th>
-                    <th class="num">GoTyme</th>
-                    <th class="num">Ending Balance</th>
+                    <th class="num">${escapeHtml(rl.salary)}</th>
+                    <th class="num">${escapeHtml(rl.mp2)} (Locked)</th>
+                    <th class="num">${escapeHtml(rl.gotyme)} (Withdrawable)</th>
+                    <th class="num">Ending ${escapeHtml(rl.balance)}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -452,9 +457,9 @@ function buildPrintableHtmlDocument(
                 <h1>${escapeHtml(sheet.name)} — ${escapeHtml(sheet.sheetTitle || `SALARY MONITORING ${sheet.year || ctx.currentYear}`)}</h1>
                 <p class="sub">
                   Generated: ${escapeHtml(generated)} ·
-                  Metrobank: ${escapeHtml(formatHtmlPHP(sheet.rows['metrobank']?.cutoff15th?.value || 0))} ·
-                  Salary: ${escapeHtml(formatHtmlPHP(sheet.rows['salary']?.cutoff15th?.value || 0))} ·
-                  Balance: ${escapeHtml(formatHtmlPHP(sheet.rows['balance']?.cutoff15th?.value || 0))}
+                  ${escapeHtml(sheet.rows['metrobank']?.label || 'Metrobank')}: ${escapeHtml(formatHtmlPHP(sheet.rows['metrobank']?.cutoff15th?.value || 0))} ·
+                  ${escapeHtml(sheet.rows['salary']?.label || 'Salary')}: ${escapeHtml(formatHtmlPHP(sheet.rows['salary']?.cutoff15th?.value || 0))} ·
+                  ${escapeHtml(sheet.rows['balance']?.label || 'Balance')}: ${escapeHtml(formatHtmlPHP(sheet.rows['balance']?.cutoff15th?.value || 0))}
                 </p>
               </div>
             </div>

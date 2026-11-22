@@ -55,6 +55,7 @@ async function warmOfflineRuntimeCache() {
       `${origin}/`,
       `${origin}/index.html`,
       `${origin}/manifest.json`,
+      `${origin}/manifest.webmanifest`,
       `${origin}/icon.svg`,
       `${origin}/pwa-192x192.png`,
       `${origin}/pwa-512x512.png`,

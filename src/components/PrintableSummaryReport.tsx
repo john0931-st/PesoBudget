@@ -53,13 +53,22 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
     sheets,
     tableTitle,
     sheetCount,
+    rowLabels,
   } = combinedMonth;
+
+  const metroLabel = rowLabels.metrobank;
+  const qrLabel = rowLabels.qr_ph;
+  const mp2Label = rowLabels.mp2;
+  const gotymeLabel = rowLabels.gotyme;
+  const salaryLabel = rowLabels.salary;
+  const balanceLabel = rowLabels.balance;
+  const lazadaLabel = rowLabels.lazada;
 
   const gotymeRate = salaryVal > 0 ? Math.round((gotymeVal / salaryVal) * 100) : 0;
   const plannedTotal = plannedMetrobank + plannedQrPh;
 
   // Group historical progression
-  const groupedMonths = groupSheetsByCalendarMonth(allMonths);
+  const groupedMonths = groupSheetsByCalendarMonth(allMonths, activeMonthData);
   const historicalList = Object.values(groupedMonths).map((cm) => ({
     key: cm.monthKey,
     name: cm.displayName,
@@ -140,12 +149,12 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             <div className="font-mono text-lg font-black text-slate-900 mt-1 tabular-nums">
               {formatPHP(Math.abs(totalExpenses))}
             </div>
-            <span className="text-[10px] text-slate-500 block mt-0.5">Rent, utilities, loans & Lazada</span>
+            <span className="text-[10px] text-slate-500 block mt-0.5">Rent, utilities, loans & {lazadaLabel}</span>
           </div>
 
           {/* Metrobank Cash */}
           <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3">
-            <span className="text-[10px] font-semibold text-blue-800 uppercase block">2. Metrobank ATM Cash</span>
+            <span className="text-[10px] font-semibold text-blue-800 uppercase block">2. {metroLabel} ATM Cash</span>
             <div className="font-mono text-lg font-black text-blue-700 mt-1 tabular-nums">
               {formatPHP(plannedMetrobank)}
             </div>
@@ -154,40 +163,40 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
 
           {/* QR PH */}
           <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3">
-            <span className="text-[10px] font-semibold text-purple-800 uppercase block">3. QR PH Digital</span>
+            <span className="text-[10px] font-semibold text-purple-800 uppercase block">3. {qrLabel} Digital</span>
             <div className="font-mono text-lg font-black text-purple-700 mt-1 tabular-nums">
               {formatPHP(plannedQrPh)}
             </div>
-            <span className="text-[10px] text-purple-700 block mt-0.5">Digital transfer for Lazada</span>
+            <span className="text-[10px] text-purple-700 block mt-0.5">Digital transfer for {lazadaLabel}</span>
           </div>
 
           {/* Pag-IBIG MP2 (Locked) */}
           <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3">
-            <span className="text-[10px] font-semibold text-amber-800 uppercase block">4. MP2 (Locked)</span>
+            <span className="text-[10px] font-semibold text-amber-800 uppercase block">4. {mp2Label} (Locked)</span>
             <div className="font-mono text-lg font-black text-amber-950 mt-1 tabular-nums">
               {formatPHP(Math.abs(governmentSavings))}
             </div>
-            <span className="text-[10px] text-amber-700 block mt-0.5">{govSavingsRate}% of salary (Non-withdrawable)</span>
+            <span className="text-[10px] text-amber-700 block mt-0.5">{govSavingsRate}% of {salaryLabel} (Non-withdrawable)</span>
           </div>
 
           {/* GoTyme (Withdrawable) */}
           <div className="bg-teal-50/80 border border-teal-200 rounded-xl p-3">
-            <span className="text-[10px] font-semibold text-teal-800 uppercase block">5. GoTyme (Withdrawable)</span>
+            <span className="text-[10px] font-semibold text-teal-800 uppercase block">5. {gotymeLabel} (Withdrawable)</span>
             <div className="font-mono text-lg font-black text-teal-950 mt-1 tabular-nums">
               {formatPHP(gotymeVal)}
             </div>
-            <span className="text-[10px] text-teal-700 block mt-0.5">{gotymeRate}% of salary · Balance: {formatPHP(balanceVal)}</span>
+            <span className="text-[10px] text-teal-700 block mt-0.5">{gotymeRate}% of {salaryLabel} · {balanceLabel}: {formatPHP(balanceVal)}</span>
           </div>
         </div>
 
         {/* Supporting Metrics Bar */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
           <div>
-            <span className="text-slate-500 block text-[10px]">Gross Salary:</span>
+            <span className="text-slate-500 block text-[10px]">Gross {salaryLabel}:</span>
             <span className="font-bold text-emerald-700 text-sm">{formatPHP(salaryVal)}</span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px]">MP2 / GoTyme Rate:</span>
+            <span className="text-slate-500 block text-[10px]">{mp2Label} / {gotymeLabel} Rate:</span>
             <span className="font-bold text-slate-900 text-sm">{govSavingsRate}% / {gotymeRate}%</span>
           </div>
           <div>
@@ -226,10 +235,10 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
                 <th className="py-2.5 px-3">Cutoff Period</th>
                 <th className="py-2.5 px-3">Sheet Name</th>
                 <th className="py-2.5 px-3 text-right">Total Expenses</th>
-                <th className="py-2.5 px-3 text-right">Gross Salary</th>
-                <th className="py-2.5 px-3 text-right">MP2 (Locked)</th>
-                <th className="py-2.5 px-3 text-right">GoTyme (Withdrawable)</th>
-                <th className="py-2.5 px-3 text-right">Ending Balance</th>
+                <th className="py-2.5 px-3 text-right">Gross {salaryLabel}</th>
+                <th className="py-2.5 px-3 text-right">{mp2Label} (Locked)</th>
+                <th className="py-2.5 px-3 text-right">{gotymeLabel} (Withdrawable)</th>
+                <th className="py-2.5 px-3 text-right">Ending {balanceLabel}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
@@ -312,7 +321,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
               Section 4 (Page 4)
             </span>
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-              {tableTitle} - Cash Outflows: Metrobank ATM & QR PH Digital
+              {tableTitle} - Cash Outflows: {metroLabel} ATM & {qrLabel} Digital
             </h2>
           </div>
           <span className="font-mono text-xs font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded">
@@ -321,17 +330,16 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Planned Channels */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
             <div className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
               Planned Outflow Channels
             </div>
             <div className="flex justify-between p-2.5 bg-white rounded-lg border border-slate-200 font-mono text-xs">
-              <span className="font-sans font-medium text-slate-700">Metrobank (Withdrawn Cash):</span>
+              <span className="font-sans font-medium text-slate-700">{metroLabel} (Withdrawn Cash):</span>
               <strong className="text-blue-700 font-bold">{formatPHP(plannedMetrobank)}</strong>
             </div>
             <div className="flex justify-between p-2.5 bg-white rounded-lg border border-slate-200 font-mono text-xs">
-              <span className="font-sans font-medium text-slate-700">QR PH (Digital Payment for Lazada):</span>
+              <span className="font-sans font-medium text-slate-700">{qrLabel} (Digital Payment for {lazadaLabel}):</span>
               <strong className="text-purple-700 font-bold">{formatPHP(plannedQrPh)}</strong>
             </div>
             <div className="flex justify-between p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 font-mono text-xs">
@@ -340,7 +348,6 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             </div>
           </div>
 
-          {/* Settlement Progress */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-bold text-slate-800 uppercase tracking-wide">
@@ -366,9 +373,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
         </div>
       </div>
 
-      {/* =========================================================================
-          SECTION 5 (PAGE 5): SAVINGS RESERVES (MP2 LOCKED VS GOTYME WITHDRAWABLE)
-         ========================================================================= */}
+      {/* SECTION 5 (PAGE 5): SAVINGS RESERVES */}
       <div className="space-y-3 break-inside-avoid">
         <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
           <div className="flex items-center gap-2">
@@ -376,19 +381,18 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
               Section 5 (Page 5)
             </span>
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-              {tableTitle} - Savings Reserves: MP2 (Locked) vs GoTyme (Withdrawable)
+              {tableTitle} - Savings Reserves: {mp2Label} (Locked) vs {gotymeLabel} (Withdrawable)
             </h2>
           </div>
           <span className="font-mono text-xs font-bold text-emerald-950 bg-emerald-100 px-2.5 py-0.5 rounded">
-            Ending Balance: {formatPHP(balanceVal)}
+            Ending {balanceLabel}: {formatPHP(balanceVal)}
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Pag-IBIG MP2 (Locked) */}
           <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-950 uppercase">Pag-IBIG MP2</span>
+              <span className="text-xs font-bold text-amber-950 uppercase">{mp2Label}</span>
               <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-full">
                 Non-Withdrawable · Locked
               </span>
@@ -397,14 +401,13 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
               {formatPHP(Math.abs(governmentSavings))}
             </div>
             <p className="text-[11px] text-amber-900 bg-white/70 p-2.5 rounded-lg border border-amber-200/60 leading-relaxed">
-              100% Tax-free government guaranteed dividend fund with 5-year lock-in maturity ({govSavingsRate}% of salary).
+              5-year lock-in sovereign fund ({govSavingsRate}% of {salaryLabel}).
             </p>
           </div>
 
-          {/* GoTyme (Withdrawable) */}
           <div className="bg-teal-50/80 border border-teal-300 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-teal-950 uppercase">GoTyme Bank</span>
+              <span className="text-xs font-bold text-teal-950 uppercase">{gotymeLabel}</span>
               <span className="text-[10px] bg-teal-200 text-teal-900 font-bold px-2 py-0.5 rounded-full">
                 Withdrawable Anytime
               </span>
@@ -414,11 +417,11 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             </div>
             <div className="text-[11px] text-teal-900 bg-white/70 p-2.5 rounded-lg border border-teal-200/60 font-mono space-y-1">
               <div className="flex justify-between">
-                <span>• GoTyme Withdrawable Reserve:</span>
+                <span>• {gotymeLabel} Withdrawable Reserve:</span>
                 <span className="font-bold">{formatPHP(gotymeVal)}</span>
               </div>
               <div className="flex justify-between">
-                <span>• Liquid Ending Balance:</span>
+                <span>• Liquid Ending {balanceLabel}:</span>
                 <span className="font-bold">{formatPHP(balanceVal)}</span>
               </div>
             </div>
@@ -426,9 +429,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
         </div>
       </div>
 
-      {/* =========================================================================
-          SECTION 6 (PAGE 6): CASH FLOW WATERFALL & NET POSITION
-         ========================================================================= */}
+      {/* SECTION 6 (PAGE 6): CASH FLOW WATERFALL & NET POSITION */}
       <div className="space-y-3 break-inside-avoid">
         <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
           <div className="flex items-center gap-2">
@@ -440,14 +441,13 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             </h2>
           </div>
           <span className="font-mono text-xs font-bold text-emerald-900 bg-emerald-100 px-2.5 py-0.5 rounded">
-            Ending Balance: {formatPHP(balanceVal)}
+            Ending {balanceLabel}: {formatPHP(balanceVal)}
           </span>
         </div>
 
-        {/* 4 Waterfall Stages */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-            <span className="text-[10px] font-bold text-emerald-800 uppercase block">1. Gross Salary</span>
+            <span className="text-[10px] font-bold text-emerald-800 uppercase block">1. Gross {salaryLabel}</span>
             <div className="font-mono text-base font-extrabold text-emerald-950 my-1">
               {formatPHP(salaryVal)}
             </div>
@@ -463,7 +463,7 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-            <span className="text-[10px] font-bold text-blue-800 uppercase block">3. Metrobank Cash</span>
+            <span className="text-[10px] font-bold text-blue-800 uppercase block">3. {metroLabel} Cash</span>
             <div className="font-mono text-base font-extrabold text-blue-950 my-1">
               {formatPHP(plannedMetrobank)}
             </div>
@@ -471,20 +471,19 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
           </div>
 
           <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-3">
-            <span className="text-[10px] font-bold text-amber-900 uppercase block">4. MP2 (Locked)</span>
+            <span className="text-[10px] font-bold text-amber-900 uppercase block">4. {mp2Label} (Locked)</span>
             <div className="font-mono text-base font-extrabold text-amber-950 my-1">
               {formatPHP(Math.abs(governmentSavings))}
             </div>
-            <span className="text-[10px] text-amber-700">Pag-IBIG MP2 Non-Withdrawable</span>
+            <span className="text-[10px] text-amber-700">{mp2Label} Non-Withdrawable</span>
           </div>
         </div>
 
-        {/* Separate Final Stage Boxes: GoTyme & Ending Balance */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="bg-teal-50/90 border border-teal-300 rounded-xl p-4 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-teal-950 uppercase tracking-wide">
-                5. GoTyme Savings
+                5. {gotymeLabel} Savings
               </span>
               <span className="text-[11px] bg-teal-200 text-teal-900 font-bold px-2 py-0.5 rounded-full">
                 Withdrawable
@@ -493,13 +492,13 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             <div className="font-mono text-2xl font-black text-teal-950">
               {formatPHP(gotymeVal)}
             </div>
-            <p className="text-xs text-teal-800">Accessible liquid reserve stored in GoTyme Bank.</p>
+            <p className="text-xs text-teal-800">Accessible liquid reserve stored in {gotymeLabel}.</p>
           </div>
 
           <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-xl p-4 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
-                6. Ending Balance
+                6. Ending {balanceLabel}
               </span>
               <span className="text-[11px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
                 Net Surplus
@@ -508,14 +507,12 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
             <div className="font-mono text-2xl font-black text-emerald-950">
               {formatPHP(balanceVal)}
             </div>
-            <p className="text-xs text-emerald-800">Formula: (Salary - Total Bills) - (MP2 + GoTyme)</p>
+            <p className="text-xs text-emerald-800">Formula: ({salaryLabel} - Total Bills) - ({mp2Label} + {gotymeLabel})</p>
           </div>
         </div>
       </div>
 
-      {/* =========================================================================
-          SECTION 7 (PAGE 7): MULTI-MONTH HISTORICAL PROGRESSION
-         ========================================================================= */}
+      {/* SECTION 7 (PAGE 7): MULTI-MONTH HISTORICAL PROGRESSION */}
       <div className="space-y-3 break-inside-avoid">
         <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
           <div className="flex items-center gap-2">
@@ -537,10 +534,10 @@ export const PrintableSummaryReport: React.FC<PrintableSummaryReportProps> = ({
               <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px]">
                 <th className="py-2.5 px-3">Calendar Month</th>
                 <th className="py-2.5 px-3 text-right">Total Bills</th>
-                <th className="py-2.5 px-3 text-right">Gross Salary</th>
-                <th className="py-2.5 px-3 text-right">MP2 (Locked)</th>
-                <th className="py-2.5 px-3 text-right">GoTyme (Withdrawable)</th>
-                <th className="py-2.5 px-3 text-right">Ending Balance</th>
+                <th className="py-2.5 px-3 text-right">Gross {salaryLabel}</th>
+                <th className="py-2.5 px-3 text-right">{mp2Label} (Locked)</th>
+                <th className="py-2.5 px-3 text-right">{gotymeLabel} (Withdrawable)</th>
+                <th className="py-2.5 px-3 text-right">Ending {balanceLabel}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono text-slate-700">

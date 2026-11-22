@@ -13,12 +13,23 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
   - **Total**: Automatically computes `Metrobank + QR PH`.
   - **Salary Breakdown & Balance**: Displays a distinct Violet **Salary** row (tap to open **Breakdown** in the floating action bar) and automatically computes `(Salary - Total) - (Pag-IBIG MP2 + GoTyme)` on the **Balance** row with a soft pulsing Rose alert whenever negative.
 - **Flexible & Adaptive Sheet Workspace**:
-  - Adaptive screen-resolution table sizing and typography from mobile to desktop with clean vertical-only scrolling.
-  - Drag-and-drop and floating bar Up/Down arrow controls to reorder expense rows manually with smooth animations.
-  - Inline formula editing (`=1200+450`), dedicated **Edit Formula (`fx`)** modal, **Merge & Unmerge Cells**, custom rows/columns, cell sticky notes, international **Currency Switcher**, and modern fintech **Settled / Deferred / Clear (`—`)** bill remarks.
-- **Analytics, Sync & Audit History**: Interactive **Summary** cards, **Charts** visualizations, centered live KPI metrics strip, real-time **Auto-Save & Sync** status badge, and a timestamped **Audit Change Log**.
-- **Light / Dark Theme & PWA Support**: Instant Light/Dark mode switch, offline queue, and installable Progressive Web App support.
-- **Automatic Release Updates**: Builds automatically compute semantic versions, Asia/Manila timestamps, and release changelogs (`dist/version.json`) with a public-link **What Changed** popup.
+  - Centered table titles, keyboard-first `Ctrl+Z` / `Ctrl+Y` Undo & Redo, and centered Remarks Filter Strip & Quick Settle controls.
+  - Inline formula editing (`=1200+450`), dynamic category renaming across sheets/summaries/charts/reports, **Merge & Unmerge Cells**, cell sticky notes, international **Currency Switcher**, and modern fintech **Settled / Deferred / Clear (`—`)** bill remarks.
+- **Analytics, Sync & Audit History**: Interactive **Summary** cards, **Charts** visualizations (keeping locked Pag-IBIG MP2 and withdrawable savings separated), centered live KPI metrics strip, top-anchored toast notifications, background public link health monitoring, and a timestamped **Audit Change Log**.
+- **True Offline PWA & Verified Cloud Auth**: Full offline accessibility with protected offline edit queuing (prompting Upload vs Discard on reconnect), strict 6-digit Gmail OTP verification on Google Sign-In, Interactive Welcome Tour, Developer Admin Console, and Dark Mode default.
+- **Automatic Releases & GitHub Sync**: Builds automatically compute semantic versions, sync `package.json` & `README.md`, update the User Manual (PDF), and publish automated GitHub releases, labels, and repo descriptions via `.github/workflows/auto-release.yml`.
+
+---
+
+## Latest Releases (Auto-Updated)
+
+<!-- AUTO-RELEASE-START -->
+**Current Version:** `v2.5.0` — *Workspace, Offline Sync & Strict Auth Release*
+
+- Dynamically updates renamed category labels across sheets, summaries, charts, and exports.
+- Enables true offline mode on the public link with permanent offline edit upload & discard controls.
+- Adds 6-digit Gmail OTP verification for Google Sign-In, Onboarding Tour, Top Toasts, Public Link Monitor, and Developer Admin Console.
+<!-- AUTO-RELEASE-END -->
 
 ---
 

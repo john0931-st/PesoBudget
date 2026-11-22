@@ -27,6 +27,16 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Developer Admin gate (strictly requires verified email matching admin address)
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'archiejp21@gmail.com';
+    }
+
+    function isNotBlocked(userId) {
+      let profile = get(/databases/$(database)/documents/users/$(userId)).data;
+      return !('status' in profile) || profile.status != 'blocked';
+    }
+
     // Validation helper for /users/{userId}
     function isValidUserProfile(data, userId) {
       return data.keys().hasAll([
@@ -43,13 +53,16 @@ service cloud.firestore {
           'email',
           'displayName',
           'photoUrl',
+          'role',
+          'status',
+          'otpVerifiedAt',
+          'lastLoginAt',
           'autoBackupEnabled',
           'autoRestoreEnabled',
           'createdAt',
           'updatedAt'
         ])
         && data.uid is string
-        && data.uid == request.auth.uid
         && data.uid == userId
         && isValidId(data.uid)
         && data.email is string
@@ -58,6 +71,10 @@ service cloud.firestore {
         && data.displayName is string
         && data.displayName.size() <= 120
         && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500))
+        && (!('role' in data) || data.role in ['admin', 'user'])
+        && (!('status' in data) || data.status in ['pending', 'approved', 'blocked'])
+        && (!('otpVerifiedAt' in data) || (data.otpVerifiedAt is string && data.otpVerifiedAt.size() <= 40))
+        && (!('lastLoginAt' in data) || (data.lastLoginAt is string && data.lastLoginAt.size() <= 40))
         && data.autoBackupEnabled is bool
         && data.autoRestoreEnabled is bool
         && data.createdAt is timestamp
@@ -161,39 +178,57 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
-    // User Private Profile & Sync Settings
+    // User Private Profile, Sync Settings & Admin Directory
     match /users/{userId} {
-      allow get: if isValidId(userId) && isOwner(userId);
-      allow list: if false;
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
       allow create: if isValidId(userId)
         && isOwner(userId)
+        && incoming().uid == request.auth.uid
         && isValidUserProfile(incoming(), userId)
+        && (!('role' in incoming()) || incoming().role == 'user' || isAdmin())
+        && (!('status' in incoming()) || incoming().status == 'pending' || isAdmin())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(userId)
-        && isOwner(userId)
         && isValidUserProfile(incoming(), userId)
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly([
-          'email',
-          'displayName',
-          'photoUrl',
-          'autoBackupEnabled',
-          'autoRestoreEnabled',
-          'updatedAt'
-        ]);
+        && (
+          (
+            isOwner(userId)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'email',
+              'displayName',
+              'photoUrl',
+              'otpVerifiedAt',
+              'lastLoginAt',
+              'autoBackupEnabled',
+              'autoRestoreEnabled',
+              'updatedAt'
+            ])
+          )
+          || (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'role',
+              'updatedAt'
+            ])
+          )
+        );
       allow delete: if false;
 
       // Real-time synced monthly budget sheets (subcollection under owner)
       match /sheets/{monthId} {
-        allow get: if isValidId(userId) && isValidId(monthId) && isOwner(userId);
-        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerUid == request.auth.uid;
+        allow get: if isValidId(userId) && isValidId(monthId) && isOwner(userId) && isNotBlocked(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && isNotBlocked(userId) && resource.data.ownerUid == request.auth.uid;
         allow create: if isValidId(userId)
           && isValidId(monthId)
           && isOwner(userId)
           && exists(/databases/$(database)/documents/users/$(userId))
+          && isNotBlocked(userId)
           && isValidBudgetSheet(incoming(), userId, monthId)
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
@@ -201,6 +236,7 @@ service cloud.firestore {
           && isValidId(monthId)
           && isOwner(userId)
           && exists(/databases/$(database)/documents/users/$(userId))
+          && isNotBlocked(userId)
           && isValidBudgetSheet(incoming(), userId, monthId)
           && incoming().ownerUid == existing().ownerUid
           && incoming().id == existing().id
@@ -217,21 +253,22 @@ service cloud.firestore {
             'clientUpdatedAt',
             'updatedAt'
           ]);
-        allow delete: if isValidId(userId) && isValidId(monthId) && isOwner(userId);
+        allow delete: if isValidId(userId) && isValidId(monthId) && isOwner(userId) && isNotBlocked(userId);
       }
 
       // Cloud Backup Snapshots (immutable point-in-time snapshots)
       match /backups/{backupId} {
-        allow get: if isValidId(userId) && isValidId(backupId) && isOwner(userId);
-        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerUid == request.auth.uid;
+        allow get: if isValidId(userId) && isValidId(backupId) && isOwner(userId) && isNotBlocked(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && isNotBlocked(userId) && resource.data.ownerUid == request.auth.uid;
         allow create: if isValidId(userId)
           && isValidId(backupId)
           && isOwner(userId)
           && exists(/databases/$(database)/documents/users/$(userId))
+          && isNotBlocked(userId)
           && isValidCloudBackup(incoming(), userId, backupId)
           && incoming().createdAt == request.time;
         allow update: if false;
-        allow delete: if isValidId(userId) && isValidId(backupId) && isOwner(userId);
+        allow delete: if isValidId(userId) && isValidId(backupId) && isOwner(userId) && isNotBlocked(userId);
       }
     }
   }

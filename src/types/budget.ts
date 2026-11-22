@@ -208,6 +208,38 @@ export interface UserSecurityProfile {
   lastBackupTime?: string;
   // Total number of cloud backup snapshots stored
   backupCount: number;
+  // Server-verified role ('admin' | 'user')
+  role?: 'admin' | 'user';
+  // Admin-managed account access status
+  accessStatus?: 'pending' | 'approved' | 'blocked';
+  // ISO timestamp when 6-digit Gmail OTP verification succeeded
+  otpVerifiedAt?: string;
+  // Authenticated Firebase UID
+  firebaseUid?: string;
+}
+
+export type UserRole = 'admin' | 'user';
+export type UserAccessStatus = 'pending' | 'approved' | 'blocked';
+
+export interface AdminUserRecord {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoUrl?: string;
+  role: UserRole;
+  status: UserAccessStatus;
+  otpVerifiedAt?: string;
+  lastLoginAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TopToastItem {
+  id: string;
+  type: 'success' | 'info' | 'warning' | 'error';
+  title: string;
+  message?: string;
+  durationMs?: number;
 }
 
 /**
