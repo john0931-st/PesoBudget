@@ -7,7 +7,8 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import type { User } from 'firebase/auth';
+import { GoogleAuthProvider, reauthenticateWithPopup, type User } from 'firebase/auth';
+import { auth, googleProvider, setGoogleOAuthAccessToken } from '../firebase';
 import { MonthData, CloudBackupRecord, UserSecurityProfile, TopToastItem } from '../types/budget';
 import {
   getCloudBackups,
@@ -25,7 +26,7 @@ import {
   syncAllMonthsToFirestore,
   verifyGmailOtpCode,
 } from '../services/firebaseSyncService';
-import type { PublicLinkStatus } from '../hooks/usePublicLinkMonitor';
+import { PUBLIC_LINK_URL, type PublicLinkStatus } from '../hooks/usePublicLinkMonitor';
 import { exportAndroidStudioProjectZip } from '../utils/androidStudioExporter';
 import { exportPortableAppFolderZip } from '../utils/portableBundleExporter';
 import {
@@ -49,8 +50,15 @@ import {
   markSessionUnlocked,
   saveStoredPortableLock,
   setActivePortablePassword,
+  verifyPortableLockPassword,
   type PortableLockMetadata,
 } from '../utils/portableCrypto';
+import {
+  clearPortableBiometricForLock,
+  enrollPortableBiometric,
+  getStoredPortableBiometric,
+  type PortableBiometricRecord,
+} from '../utils/portableBiometrics';
 import { downloadUserManualPdf, getCurrentManualVersion } from '../utils/manualPdfService';
 import { PasswordConfirmModal } from './PasswordConfirmModal';
 import { ActionMessageModal, type ActionMessageVariant } from './ActionMessageModal';
@@ -83,6 +91,7 @@ import {
   MailCheck,
   Compass,
   Activity,
+  Fingerprint,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -149,6 +158,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [storedLockMeta, setStoredLockMeta] = useState<PortableLockMetadata | null>(
     () => getStoredPortableLock()
   );
+  const [biometricRecord, setBiometricRecord] = useState<PortableBiometricRecord | null>(() => {
+    const initialLock =
+      (typeof window !== 'undefined' ? window.__PESOBUDGET_PORTABLE_LOCK__ : undefined) ||
+      getStoredPortableLock();
+    return initialLock ? getStoredPortableBiometric(initialLock.lockId) : null;
+  });
+  const [isBiometricBusy, setIsBiometricBusy] = useState(false);
   const [lockPasswordInput, setLockPasswordInput] = useState('');
   const [lockPasswordConfirm, setLockPasswordConfirm] = useState('');
   const [lockHintInput, setLockHintInput] = useState(
@@ -156,6 +172,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
   const [showLockPassword, setShowLockPassword] = useState(false);
   const [showPasswordEditor, setShowPasswordEditor] = useState(false);
+  const [lockOtpSending, setLockOtpSending] = useState(false);
+  const [lockOtpSentMaskedEmail, setLockOtpSentMaskedEmail] = useState('');
+  const [lockOtpDeliveryMode, setLockOtpDeliveryMode] = useState<'email' | 'oauth_session_code'>('email');
+  const [lockOtpSessionCodeHint, setLockOtpSessionCodeHint] = useState<string | null>(null);
+  const [lockOtpInput, setLockOtpInput] = useState('');
+  const [lockOtpError, setLockOtpError] = useState<string | null>(null);
+  const [lockOtpVerifying, setLockOtpVerifying] = useState(false);
+  const [lockSetupVerifiedAt, setLockSetupVerifiedAt] = useState<string | null>(null);
   const [pendingDecryptContext, setPendingDecryptContext] = useState<
     | {
         kind: 'json_files';
@@ -203,6 +227,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
   }, [isOpen, firebaseUid, isOnline, securityProfile.isAuthenticated]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const embeddedLock =
+      typeof window !== 'undefined' ? window.__PESOBUDGET_PORTABLE_LOCK__ : undefined;
+    const activeLock = embeddedLock || storedLockMeta || getStoredPortableLock();
+    setBiometricRecord(activeLock ? getStoredPortableBiometric(activeLock.lockId) : null);
+  }, [isOpen, storedLockMeta]);
+
   if (!isOpen) return null;
 
   // Logged-in account on Firebase Auth (only true after Gmail OTP verification succeeds)
@@ -222,6 +254,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return embeddedLock || storedLockMeta || getStoredPortableLock();
   };
 
+  const activeLockMeta = getActiveLockMeta();
+  const isPortableLockSet = Boolean(activeLockMeta);
+
   const requireLockPassword = (
     title: string,
     description: string,
@@ -229,12 +264,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ) => {
     const activeLock = getActiveLockMeta();
     if (!activeLock) {
-      setShowPasswordEditor(true);
       setActionPopup({
         variant: 'blocked',
-        title: 'Not Permitted',
-        message: `${title} is not permitted without a Portable Password Lock.`,
-        detail: 'Please set and save a password in Portable Password Lock first.',
+        title: 'Portable Password Lock Required',
+        message: `${title} is disabled until a Portable Password Lock is set.`,
+        detail: isLoggedIn
+          ? 'Open Portable Password Lock below and verify a 6-digit Gmail code to set your password.'
+          : 'Sign in with Google first, then set a Portable Password Lock with Gmail code verification.',
       });
       return;
     }
@@ -413,6 +449,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     try {
       await signOutFirebase();
       setPendingOtpUser(null);
+      setShowPasswordEditor(false);
+      setLockPasswordInput('');
+      setLockPasswordConfirm('');
+      resetLockSetupOtpState();
       const updated: UserSecurityProfile = {
         ...securityProfile,
         isAuthenticated: false,
@@ -620,7 +660,142 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     );
   };
 
+  const resetLockSetupOtpState = () => {
+    setLockOtpSending(false);
+    setLockOtpSentMaskedEmail('');
+    setLockOtpDeliveryMode('email');
+    setLockOtpSessionCodeHint(null);
+    setLockOtpInput('');
+    setLockOtpError(null);
+    setLockOtpVerifying(false);
+    setLockSetupVerifiedAt(null);
+  };
+
+  const dispatchLockSetupOtp = async (forceRefreshGoogleToken = false) => {
+    if (!isOnline) {
+      setLockOtpError('Connect to internet first so we can send your 6-digit Gmail verification code.');
+      return;
+    }
+    const currentUser = auth.currentUser;
+    if (!isLoggedIn || !currentUser || !currentUser.email) {
+      setShowPasswordEditor(false);
+      resetLockSetupOtpState();
+      setActionPopup({
+        variant: 'blocked',
+        title: 'Google Sign-In Required',
+        message: 'Sign in with Google first before setting a Portable Password Lock.',
+        detail: 'Portable Password Lock setup sends a 6-digit verification code to your verified Gmail.',
+      });
+      return;
+    }
+
+    setLockOtpSending(true);
+    setLockOtpError(null);
+    try {
+      if (forceRefreshGoogleToken) {
+        const reauth = await reauthenticateWithPopup(currentUser, googleProvider);
+        const oauthCred = GoogleAuthProvider.credentialFromResult(reauth);
+        setGoogleOAuthAccessToken(oauthCred?.accessToken ?? null);
+      }
+
+      const dispatch = await requestGmailVerificationOtp(currentUser);
+      setLockOtpSentMaskedEmail(dispatch.maskedEmail);
+      setLockOtpDeliveryMode(dispatch.deliveryMode);
+      setLockOtpSessionCodeHint(dispatch.sessionCode || null);
+      setLockOtpInput('');
+      onEmitToast?.({
+        type: 'info',
+        title:
+          dispatch.deliveryMode === 'oauth_session_code'
+            ? 'Google Confirmation Code Issued'
+            : '6-Digit Code Sent to Gmail',
+        message:
+          dispatch.deliveryMode === 'oauth_session_code'
+            ? 'Enter the 6-digit confirmation code shown to unlock Portable Password setup.'
+            : `Enter the 6-digit verification code sent to ${dispatch.maskedEmail}.`,
+      });
+    } catch (err) {
+      setLockOtpError(
+        err instanceof Error
+          ? err.message
+          : 'Could not send 6-digit verification code to Gmail.'
+      );
+    } finally {
+      setLockOtpSending(false);
+    }
+  };
+
+  const handleTogglePasswordEditor = () => {
+    if (showPasswordEditor) {
+      setShowPasswordEditor(false);
+      setLockPasswordInput('');
+      setLockPasswordConfirm('');
+      resetLockSetupOtpState();
+      return;
+    }
+
+    if (!isLoggedIn || !auth.currentUser) {
+      setActionPopup({
+        variant: 'blocked',
+        title: 'Google Sign-In Required',
+        message: 'Please sign in with Google above before setting up a Portable Password Lock.',
+        detail: 'A 6-digit verification code must be sent to your Gmail first.',
+      });
+      return;
+    }
+
+    if (!isOnline) {
+      setFeedback({
+        type: 'info',
+        text: 'Please go Online first to verify a 6-digit code sent to your Gmail.',
+      });
+      return;
+    }
+
+    resetLockSetupOtpState();
+    setLockPasswordInput('');
+    setLockPasswordConfirm('');
+    setShowPasswordEditor(true);
+    void dispatchLockSetupOtp(false);
+  };
+
+  const handleVerifyLockSetupOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const currentUser = auth.currentUser;
+    if (!isLoggedIn || !currentUser) return;
+
+    const cleaned = lockOtpInput.trim().replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(cleaned)) {
+      setLockOtpError('Enter the exact 6-digit verification code.');
+      return;
+    }
+
+    setLockOtpVerifying(true);
+    setLockOtpError(null);
+    try {
+      const { verifiedAt } = await verifyGmailOtpCode(currentUser, cleaned);
+      setLockSetupVerifiedAt(verifiedAt);
+      setLockOtpInput('');
+      setLockOtpSessionCodeHint(null);
+      setFeedback({
+        type: 'success',
+        text: `Gmail code verified for ${currentUser.email}. Enter and save your Portable Password below.`,
+      });
+    } catch (err) {
+      setLockOtpError(err instanceof Error ? err.message : 'Invalid verification code.');
+    } finally {
+      setLockOtpVerifying(false);
+    }
+  };
+
   const handleSavePortablePassword = async () => {
+    if (!isLoggedIn || !auth.currentUser || !lockSetupVerifiedAt) {
+      setFeedback({
+        type: 'info',
+        text: 'Sign in with Google and verify the 6-digit Gmail code first before saving a password lock.',
+      });
+      return;
+    }
     if (lockPasswordInput.length < 4) {
       setFeedback({
         type: 'info',
@@ -636,6 +811,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       return;
     }
 
+    const hadPreviousBiometric = Boolean(biometricRecord);
+    clearPortableBiometricForLock();
+    setBiometricRecord(null);
+
     const meta = createPortableLockMetadata(lockPasswordInput, lockHintInput);
     saveStoredPortableLock(meta);
     markSessionUnlocked(meta.lockId, lockPasswordInput);
@@ -645,6 +824,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const savedPassword = lockPasswordInput;
     setLockPasswordInput('');
     setLockPasswordConfirm('');
+    resetLockSetupOtpState();
     setShowPasswordEditor(false);
 
     if (localFolderLabel && isFolderAutoSyncArmed()) {
@@ -663,11 +843,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     setFeedback({
       type: 'success',
-      text: 'Password lock saved! Click "Download PesoBudget/ ZIP" to export your password-protected index.html and encrypted data/*.json files.',
+      text: hadPreviousBiometric
+        ? 'New password lock saved! Previous optional fingerprint link was cleared—tap "Add Fingerprint" if you want to re-link it.'
+        : 'Portable Password Lock saved! Protected actions are now unlocked (Biometrics Fingerprint is optional).',
     });
   };
 
+  const executeEnrollFingerprint = async (
+    activeLock: PortableLockMetadata,
+    verifiedPassword: string
+  ) => {
+    setIsBiometricBusy(true);
+    try {
+      const enrolled = await enrollPortableBiometric(activeLock, verifiedPassword);
+      setBiometricRecord(enrolled);
+      const msg =
+        'Fingerprint Biometrics enabled! You can now unlock PesoBudget and confirm protected actions using your fingerprint.';
+      setFeedback({ type: 'success', text: msg });
+      onEmitToast?.({
+        type: 'success',
+        title: 'Fingerprint Enabled',
+        message: 'Fingerprint unlock linked to your Portable Password Lock.',
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not enable fingerprint biometrics.';
+      setFeedback({ type: 'info', text: msg });
+      setActionPopup({
+        variant: 'info',
+        title: 'Fingerprint Setup Notice',
+        message: msg,
+      });
+    } finally {
+      setIsBiometricBusy(false);
+    }
+  };
+
+  const handleAddFingerprint = () => {
+    const activeLock = getActiveLockMeta();
+    if (!activeLock) {
+      setActionPopup({
+        variant: 'blocked',
+        title: 'Password Required First',
+        message: 'Fingerprint Biometrics can only be added when a Portable Password is set.',
+        detail: 'Click "Set Password" above to create your lock password first.',
+      });
+      return;
+    }
+
+    const sessionPw = getActivePortablePassword();
+    if (sessionPw && verifyPortableLockPassword(activeLock, sessionPw)) {
+      void executeEnrollFingerprint(activeLock, sessionPw);
+      return;
+    }
+
+    requireLockPassword(
+      'Add Fingerprint Biometrics',
+      'Confirm your Portable Lock password first before registering your fingerprint.',
+      (verifiedPassword) => {
+        void executeEnrollFingerprint(activeLock, verifiedPassword);
+      }
+    );
+  };
+
+  const handleRemoveFingerprint = () => {
+    const activeLock = getActiveLockMeta();
+    if (!activeLock) return;
+
+    const removeNow = () => {
+      clearPortableBiometricForLock(activeLock.lockId);
+      setBiometricRecord(null);
+      setFeedback({
+        type: 'info',
+        text: 'Fingerprint biometrics removed. Your Portable Password Lock remains active.',
+      });
+      onEmitToast?.({
+        type: 'info',
+        title: 'Fingerprint Removed',
+        message: 'Fingerprint unlock was unlinked from this device.',
+      });
+    };
+
+    const sessionPw = getActivePortablePassword();
+    if (sessionPw && verifyPortableLockPassword(activeLock, sessionPw)) {
+      removeNow();
+      return;
+    }
+
+    requireLockPassword(
+      'Remove Fingerprint Biometrics',
+      'Enter your Portable Lock password to unlink fingerprint biometrics.',
+      () => {
+        removeNow();
+      }
+    );
+  };
+
   const executeRemovePortablePassword = async () => {
+    clearPortableBiometricForLock();
+    setBiometricRecord(null);
     saveStoredPortableLock(null);
     setStoredLockMeta(null);
     setLockPasswordInput('');
@@ -728,41 +1001,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
    */
   const executeExportPortableFolder = async (verifiedPassword?: string) => {
     let exportPassword: string | undefined = verifiedPassword || undefined;
-    let exportHint: string | undefined = lockHintInput || storedLockMeta?.hint;
+    const exportHint: string | undefined = lockHintInput || storedLockMeta?.hint;
 
-    if (lockPasswordInput.length > 0) {
-      if (lockPasswordInput.length < 4) {
-        setFeedback({
-          type: 'info',
-          text: 'Password must be at least 4 characters before exporting a locked ZIP.',
-        });
-        return;
-      }
-      if (lockPasswordInput !== lockPasswordConfirm) {
-        setFeedback({
-          type: 'info',
-          text: 'Passwords do not match. Please check Confirm Password before exporting.',
-        });
-        return;
-      }
-      const meta = createPortableLockMetadata(lockPasswordInput, lockHintInput);
-      saveStoredPortableLock(meta);
-      markSessionUnlocked(meta.lockId, lockPasswordInput);
-      setStoredLockMeta(meta);
-      window.dispatchEvent(new Event('pesobudget:lock_changed'));
-      exportPassword = lockPasswordInput;
-      exportHint = lockHintInput;
-      setLockPasswordInput('');
-      setLockPasswordConfirm('');
-      setShowPasswordEditor(false);
-    } else if (!exportPassword) {
+    if (!exportPassword) {
       const sessionPw = getActivePortablePassword();
       const activeLock = getActiveLockMeta();
       if (activeLock && !sessionPw) {
-        setShowPasswordEditor(true);
         setFeedback({
           type: 'info',
-          text: 'Enter your password in the Portable Password Lock box first so the exported ZIP stays encrypted.',
+          text: 'Confirm your Portable Lock password so the exported ZIP stays encrypted.',
         });
         return;
       }
@@ -806,22 +1053,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       'Download Portable PesoBudget/ ZIP',
       'Enter your lock password to export the portable index.html and encrypted database ZIP.',
       (verifiedPassword) => {
-        if (lockPasswordInput.length > 0) {
-          if (lockPasswordInput.length < 4) {
-            setFeedback({
-              type: 'info',
-              text: 'Password must be at least 4 characters before exporting a locked ZIP.',
-            });
-            return;
-          }
-          if (lockPasswordInput !== lockPasswordConfirm) {
-            setFeedback({
-              type: 'info',
-              text: 'Passwords do not match. Please check Confirm Password before exporting.',
-            });
-            return;
-          }
-        }
         void executeExportPortableFolder(verifiedPassword);
       }
     );
@@ -1312,7 +1543,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {otpSessionCodeHint}
                       </span>
                       <span className="block text-[10px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-                        Email SMTP is not configured in Secrets yet; issued securely for this verified Google session.
+                        Gmail send permission was not granted for this session; issued securely via verified Google OAuth.
                       </span>
                     </div>
                     <button
@@ -1467,10 +1698,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <UserCircle2 className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs lg:text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Sign in with Google (Gmail Code Verification)
+                      Sign in with Google (Auto 6-Digit Gmail Code)
                     </div>
                     <p className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">
-                      Sends a 6-digit verification code to your Gmail before connecting Firebase Cloud Sync.
+                      Automatically emails a 6-digit verification code to your Gmail inbox after you grant Gmail send permission—no SMTP setup required.
                     </p>
                   </div>
                 </div>
@@ -1532,8 +1763,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={handleRestoreLatest}
-                  disabled={isRestoring || backups.length === 0}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold text-xs lg:text-sm rounded transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  disabled={!isPortableLockSet || isRestoring || backups.length === 0}
+                  title={
+                    !isPortableLockSet
+                      ? 'Set a Portable Password Lock first to enable Restore from Google'
+                      : 'Restore latest backup snapshot'
+                  }
+                  className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 text-white font-bold text-xs lg:text-sm rounded transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed"
                 >
                   <RotateCcw className="w-4 h-4" />
                   <span>{isRestoring ? 'Restoring...' : 'Restore from Google'}</span>
@@ -1557,8 +1793,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportPortableFolder}
-                disabled={isExportingPortable}
-                className="inline-flex items-center justify-center gap-1.5 py-2 px-3.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs lg:text-sm rounded transition-colors shadow-xs cursor-pointer disabled:opacity-60 shrink-0 whitespace-nowrap"
+                disabled={!isPortableLockSet || isExportingPortable}
+                title={
+                  !isPortableLockSet
+                    ? 'Set a Portable Password Lock first to enable PesoBudget/ ZIP download'
+                    : 'Download encrypted Portable PesoBudget/ ZIP'
+                }
+                className="inline-flex items-center justify-center gap-1.5 py-2 px-3.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 text-white font-bold text-xs lg:text-sm rounded transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
               >
                 <Download className="w-3.5 h-3.5 shrink-0" />
                 <span>
@@ -1595,11 +1836,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               Off
                             </span>
                           )}
+                          {!isLoggedIn && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 text-[10px] font-semibold">
+                              Google Sign-In Required
+                            </span>
+                          )}
                         </div>
                         <p className="text-[10.5px] lg:text-xs text-slate-600 dark:text-slate-300 leading-snug">
-                          {isLockEnabled
-                            ? 'Opening index.html requires your password. Downloaded ZIPs encrypt index.html and data/*.json.'
-                            : 'Set a password before downloading PesoBudget/ ZIP so index.html and data/*.json require a password when opened.'}
+                          {!isLoggedIn
+                            ? 'Sign in with Google above first. Setting a Portable Password sends a 6-digit Gmail code and unlocks ZIP, JSON, Folder, Restore & Android exports.'
+                            : isLockEnabled
+                              ? 'Protected exports & restores unlocked. Changing password requires 6-digit Gmail verification.'
+                              : 'Set a password (via 6-digit Gmail verification) to unlock PesoBudget/ ZIP, JSON, Folder, Restore & Export buttons.'}
                         </p>
                       </div>
                     </div>
@@ -1607,16 +1855,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setShowPasswordEditor((prev) => !prev)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer"
+                        disabled={!isLoggedIn || lockOtpSending}
+                        onClick={handleTogglePasswordEditor}
+                        title={
+                          !isLoggedIn
+                            ? 'Sign in with Google first to set up Portable Password Lock'
+                            : isLockEnabled
+                              ? 'Verify 6-digit Gmail code to change password'
+                              : 'Verify 6-digit Gmail code to set Portable Password Lock'
+                        }
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:cursor-not-allowed transition-colors"
                       >
                         <KeyRound className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                         <span>
                           {showPasswordEditor
                             ? 'Cancel'
-                            : isLockEnabled
-                              ? 'Change Password'
-                              : 'Set Password'}
+                            : lockOtpSending
+                              ? 'Sending Code...'
+                              : isLockEnabled
+                                ? 'Change Password'
+                                : 'Set Password'}
                         </span>
                       </button>
 
@@ -1644,76 +1902,262 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  {showPasswordEditor && (
-                    <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-md p-3 space-y-2.5">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10.5px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Password (min 4 characters)
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showLockPassword ? 'text' : 'password'}
-                              value={lockPasswordInput}
-                              onChange={(e) => setLockPasswordInput(e.target.value)}
-                              placeholder="Enter password..."
-                              className="w-full pl-2.5 pr-8 py-1.5 text-xs lg:text-sm border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                            />
+                  {showPasswordEditor && isLoggedIn && (
+                    !lockSetupVerifiedAt ? (
+                      <form
+                        onSubmit={handleVerifyLockSetupOtp}
+                        className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-md p-3 space-y-2.5"
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="w-7 h-7 rounded bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 flex items-center justify-center text-emerald-700 dark:text-emerald-300 shrink-0">
+                            <MailCheck className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11px] lg:text-xs font-bold text-slate-900 dark:text-slate-100">
+                              Step 1 of 2: Verify 6-Digit Gmail Code
+                            </div>
+                            <p className="text-[10.5px] lg:text-xs text-slate-600 dark:text-slate-300 leading-snug mt-0.5">
+                              {lockOtpSending
+                                ? 'Sending 6-digit verification code to your Gmail...'
+                                : lockOtpDeliveryMode === 'oauth_session_code'
+                                  ? `Google session confirmed for ${lockOtpSentMaskedEmail || loggedInEmail}. Enter the 6-digit confirmation code below or tap Send to Gmail Inbox.`
+                                  : `Sent 6-digit verification code to ${lockOtpSentMaskedEmail || loggedInEmail}. Enter it below before setting your Portable Password.`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {lockOtpDeliveryMode === 'oauth_session_code' && lockOtpSessionCodeHint && (
+                          <div className="rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="text-[10.5px] text-amber-900 dark:text-amber-200">
+                              <span>Session Code: </span>
+                              <strong className="font-mono tracking-widest px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 border border-amber-300 dark:border-amber-700">
+                                {lockOtpSessionCodeHint}
+                              </strong>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                disabled={lockOtpSending}
+                                onClick={() => void dispatchLockSetupOtp(true)}
+                                className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-[10.5px] font-semibold cursor-pointer disabled:opacity-50"
+                              >
+                                Email to Gmail Inbox
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLockOtpInput(lockOtpSessionCodeHint);
+                                  if (lockOtpError) setLockOtpError(null);
+                                }}
+                                className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-bold cursor-pointer"
+                              >
+                                Fill Code
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            autoFocus
+                            value={lockOtpInput}
+                            onChange={(e) => {
+                              setLockOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6));
+                              if (lockOtpError) setLockOtpError(null);
+                            }}
+                            placeholder="000000"
+                            className="sm:w-40 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 text-xs lg:text-sm font-mono font-bold tracking-[0.35em] text-center text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="submit"
+                              disabled={lockOtpVerifying || lockOtpSending || lockOtpInput.trim().length !== 6}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white font-bold text-xs rounded cursor-pointer disabled:cursor-not-allowed"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{lockOtpVerifying ? 'Verifying...' : 'Verify Code'}</span>
+                            </button>
                             <button
                               type="button"
-                              onClick={() => setShowLockPassword((prev) => !prev)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300 cursor-pointer"
-                              title={showLockPassword ? 'Hide password' : 'Show password'}
+                              disabled={lockOtpSending || lockOtpVerifying}
+                              onClick={() => void dispatchLockSetupOtp(false)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded cursor-pointer disabled:opacity-50"
                             >
-                              {showLockPassword ? (
-                                <EyeOff className="w-3.5 h-3.5" />
-                              ) : (
-                                <Eye className="w-3.5 h-3.5" />
-                              )}
+                              <RefreshCw className={`w-3 h-3 ${lockOtpSending ? 'animate-spin' : ''}`} />
+                              <span>{lockOtpSending ? 'Sending...' : 'Resend'}</span>
                             </button>
                           </div>
                         </div>
 
-                        <div>
-                          <label className="block text-[10.5px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Confirm Password
-                          </label>
-                          <input
-                            type={showLockPassword ? 'text' : 'password'}
-                            value={lockPasswordConfirm}
-                            onChange={(e) => setLockPasswordConfirm(e.target.value)}
-                            placeholder="Re-enter password..."
-                            className="w-full px-2.5 py-1.5 text-xs lg:text-sm border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                          />
+                        {lockOtpError && (
+                          <p className="text-[10.5px] lg:text-xs font-semibold text-rose-600 dark:text-rose-400">
+                            {lockOtpError}
+                          </p>
+                        )}
+                      </form>
+                    ) : (
+                      <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-md p-3 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                          <span className="inline-flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>Step 2 of 2: Gmail Verified ({loggedInEmail}) — Set Portable Password</span>
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10.5px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Password (min 4 characters)
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showLockPassword ? 'text' : 'password'}
+                                value={lockPasswordInput}
+                                onChange={(e) => setLockPasswordInput(e.target.value)}
+                                placeholder="Enter password..."
+                                autoFocus
+                                className="w-full pl-2.5 pr-8 py-1.5 text-xs lg:text-sm border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowLockPassword((prev) => !prev)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300 cursor-pointer"
+                                title={showLockPassword ? 'Hide password' : 'Show password'}
+                              >
+                                {showLockPassword ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10.5px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Confirm Password
+                            </label>
+                            <input
+                              type={showLockPassword ? 'text' : 'password'}
+                              value={lockPasswordConfirm}
+                              onChange={(e) => setLockPasswordConfirm(e.target.value)}
+                              placeholder="Re-enter password..."
+                              className="w-full px-2.5 py-1.5 text-xs lg:text-sm border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                          <div className="flex-1">
+                            <label className="block text-[10.5px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Password Hint (optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={lockHintInput}
+                              onChange={(e) => setLockHintInput(e.target.value)}
+                              placeholder="e.g., My birthday + PIN"
+                              maxLength={80}
+                              className="w-full px-2.5 py-1.5 text-xs lg:text-sm border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleSavePortablePassword}
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs lg:text-sm rounded cursor-pointer shrink-0"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Save Password Lock</span>
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-                        <div className="flex-1">
-                          <label className="block text-[10.5px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Password Hint (optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={lockHintInput}
-                            onChange={(e) => setLockHintInput(e.target.value)}
-                            placeholder="e.g., My birthday + PIN"
-                            maxLength={80}
-                            className="w-full px-2.5 py-1.5 text-xs lg:text-sm border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleSavePortablePassword}
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs lg:text-sm rounded cursor-pointer shrink-0"
-                        >
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>Save Password Lock</span>
-                        </button>
-                      </div>
-                    </div>
+                    )
                   )}
+
+                  {/* Optional Fingerprint Biometrics (Not mandatory; strictly gated on having an active Portable Password Lock) */}
+                  {(() => {
+                    const hasBiometric = Boolean(
+                      isLockEnabled &&
+                        activeLock &&
+                        biometricRecord &&
+                        biometricRecord.lockId === activeLock.lockId
+                    );
+                    return (
+                      <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <Fingerprint
+                            className={`w-4 h-4 shrink-0 mt-0.5 ${
+                              !isLockEnabled
+                                ? 'text-slate-400 dark:text-slate-500'
+                                : hasBiometric
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-slate-600 dark:text-slate-300'
+                            }`}
+                          />
+                          <div className="min-w-0">
+                            <div className="text-[11px] lg:text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                              <span>Biometrics Fingerprint</span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold">
+                                Optional
+                              </span>
+                              {!isLockEnabled ? (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 text-[10px] font-semibold">
+                                  Set Password First
+                                </span>
+                              ) : hasBiometric ? (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-semibold">
+                                  Active
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-semibold">
+                                  Off
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10.5px] text-slate-600 dark:text-slate-400 leading-snug">
+                              {!isLockEnabled
+                                ? 'Optional quick unlock — requires setting a Portable Password Lock above first.'
+                                : hasBiometric
+                                  ? 'Unlock the app & protected operations with device fingerprint / Touch ID / Windows Hello.'
+                                  : 'Optional: link your device fingerprint to unlock this password-protected workbook quickly.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {hasBiometric ? (
+                            <button
+                              type="button"
+                              disabled={isBiometricBusy}
+                              onClick={handleRemoveFingerprint}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-50"
+                            >
+                              <Fingerprint className="w-3 h-3" />
+                              <span>Remove Fingerprint</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!isLockEnabled || isBiometricBusy}
+                              onClick={handleAddFingerprint}
+                              title={
+                                isLockEnabled
+                                  ? 'Optional: register device fingerprint for Portable Password Lock'
+                                  : 'Set a Portable Password above first to enable Fingerprint Biometrics'
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 text-white font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:cursor-not-allowed transition-colors"
+                            >
+                              <Fingerprint className="w-3 h-3" />
+                              <span>{isBiometricBusy ? 'Scanning...' : 'Add Fingerprint'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -1752,9 +2196,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleConnectLocalFolder}
-                      disabled={isFolderBusy}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-50"
-                      title="Link your extracted PesoBudget/data folder (works in standalone Chrome, Edge, or Brave on laptop/desktop)"
+                      disabled={!isPortableLockSet || isFolderBusy}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                      title={
+                        !isPortableLockSet
+                          ? 'Set a Portable Password Lock first to enable Connect data/ Folder'
+                          : 'Link your extracted PesoBudget/data folder (works in standalone Chrome, Edge, or Brave on laptop/desktop)'
+                      }
                     >
                       <FolderSync className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                       <span>{isFolderBusy ? 'Connecting...' : 'Connect data/ Folder'}</span>
@@ -1762,8 +2210,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleDownloadAllInOneJson}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer"
-                      title="Download one PesoBudget-Database.json file containing sheets, years, changelog, settings, and offline queue"
+                      disabled={!isPortableLockSet}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                      title={
+                        !isPortableLockSet
+                          ? 'Set a Portable Password Lock first to enable All-in-One JSON export'
+                          : 'Download one PesoBudget-Database.json file containing sheets, years, changelog, settings, and offline queue'
+                      }
                     >
                       <Download className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                       <span>Export All-in-One .json</span>
@@ -1771,8 +2224,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleTriggerLoadJsonPicker}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer"
-                      title="Select 1 all-in-one .json OR select multiple .json files (sheets.json + years.json + changelog.json) at the same time"
+                      disabled={!isPortableLockSet}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                      title={
+                        !isPortableLockSet
+                          ? 'Set a Portable Password Lock first to enable loading JSON files'
+                          : 'Select 1 all-in-one .json OR select multiple .json files (sheets.json + years.json + changelog.json) at the same time'
+                      }
                     >
                       <Upload className="w-3 h-3 text-blue-700 dark:text-blue-400" />
                       <span>Load .json</span>
@@ -1783,8 +2241,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleSaveToConnectedFolder}
-                      disabled={isFolderBusy}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-50"
+                      disabled={!isPortableLockSet || isFolderBusy}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <Download className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                       <span>Save</span>
@@ -1792,8 +2250,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleLoadFromConnectedFolder}
-                      disabled={isFolderBusy}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-50"
+                      disabled={!isPortableLockSet || isFolderBusy}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-semibold text-[11px] lg:text-xs rounded cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <Upload className="w-3 h-3 text-blue-700 dark:text-blue-400" />
                       <span>Load</span>
@@ -1892,10 +2350,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               type="button"
               onClick={handleExportAndroidStudio}
-              disabled={isExportingAndroid}
-              className="inline-flex items-center justify-center gap-1.5 py-2 px-3.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold text-xs lg:text-sm rounded transition-colors shadow-xs cursor-pointer disabled:opacity-60 shrink-0 whitespace-nowrap"
+              disabled={!isPortableLockSet || isExportingAndroid}
+              title={
+                !isPortableLockSet
+                  ? 'Set a Portable Password Lock first to enable Android Studio export'
+                  : 'Download offline Android Studio Gradle project ZIP'
+              }
+              className="inline-flex items-center justify-center gap-1.5 py-2 px-3.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 text-white font-bold text-xs lg:text-sm rounded transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-400 dark:text-white shrink-0" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
               <span>
                 {isExportingAndroid ? 'Preparing ZIP...' : 'Export Project for Android Studio'}
               </span>
@@ -1966,6 +2429,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ? 'Checking public link...'
                       : linkStatus?.detail || 'Monitored automatically in background'}
                   </p>
+                  <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-0.5 truncate" title={PUBLIC_LINK_URL}>
+                    {PUBLIC_LINK_URL}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -2027,8 +2493,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRestoreSpecific(b)}
-                      disabled={isRestoring}
-                      className="px-2.5 py-1 text-[11px] lg:text-xs font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-200 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded transition-colors cursor-pointer shrink-0"
+                      disabled={!isPortableLockSet || isRestoring}
+                      title={
+                        !isPortableLockSet
+                          ? 'Set a Portable Password Lock first to restore snapshots'
+                          : 'Restore this backup snapshot'
+                      }
+                      className="px-2.5 py-1 text-[11px] lg:text-xs font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-200 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:border-slate-200 dark:disabled:border-slate-700 border border-blue-200 dark:border-blue-800 rounded transition-colors cursor-pointer disabled:cursor-not-allowed shrink-0"
                     >
                       Restore This
                     </button>

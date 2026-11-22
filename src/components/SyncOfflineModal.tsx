@@ -436,10 +436,10 @@ export const SyncOfflineModal: React.FC<SyncOfflineModalProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
                   <span className="text-[10px] lg:text-xs uppercase font-bold text-amber-700 dark:text-amber-400 tracking-wider block">
-                    Sign In Target Google Account (Requires Gmail Code)
+                    Sign In Target Google Account (Auto 6-Digit Gmail Code)
                   </span>
                   <span className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300">
-                    Verify with a Gmail OTP code to upload offline changes to Firebase Cloud.
+                    Automatically emails a 6-digit code to your Gmail (with send permission) before uploading offline changes.
                   </span>
                 </div>
                 <button

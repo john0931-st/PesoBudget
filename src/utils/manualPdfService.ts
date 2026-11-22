@@ -1171,7 +1171,7 @@ export function downloadUserManualPdf(): {
       feature: 'Strict Gmail OTP Cloud Sync',
       location: 'Settings -> Sign in with Google',
       explanation:
-        'Requires a 6-digit verification code (sent to Gmail when SMTP is configured, or issued via verified Google OAuth session fallback) before unlocking Firebase Cloud backup and snapshot restore.',
+        'Automatically emails a 6-digit verification code to your Gmail via Google permission (with OAuth fallback if declined) before unlocking Firebase Cloud backup and snapshot restore.',
     },
     {
       feature: 'True Offline Mode & Upload Prompt',
@@ -1183,7 +1183,7 @@ export function downloadUserManualPdf(): {
       feature: 'Top Toasts & Public Link Monitor',
       location: 'Top Notification Banner / Settings',
       explanation:
-        'Checks public link availability automatically in the background and renders all app alerts in modern top-anchored toast notifications.',
+        'Checks pesobudget-smart-philippine-expense-payroll-track.ai.studio availability automatically in the background and renders all alerts in modern top-anchored toast notifications.',
     },
     {
       feature: 'Welcome Tour & Admin Console',
@@ -1192,10 +1192,10 @@ export function downloadUserManualPdf(): {
         'Guides new users with an interactive 5-step onboarding tour and equips authorized developer administrators with user approval and block controls.',
     },
     {
-      feature: 'Portable HTML Folder ZIP',
-      location: 'Settings -> PesoBudget/ ZIP',
+      feature: 'Portable HTML ZIP & Optional Fingerprint',
+      location: 'Settings -> Portable Password Lock',
       explanation:
-        'Packages an offline self-contained HTML app and JSON database with optional AES password encryption.',
+        'Requires Google Sign-In plus a 6-digit Gmail verification code to set a Portable Password Lock (enabling protected exports, imports, prints, and restores), with optional hardware Fingerprint unlock.',
     },
     {
       feature: 'Local data/ Folder Sync',
@@ -1335,7 +1335,8 @@ export function downloadUserManualPdf(): {
     '- Use the Undo/Redo arrows in the table title bar or press Ctrl+Z / Ctrl+Y to revert or reapply changes, alongside Arrow keys, Tab, and Enter/F2 for fast keyboard entry.',
     '- Rename any payment or savings row inline under PAYMENTS and PesoBudget updates that label across Summary, Charts, and Reports automatically.',
     '- When working offline on the public link, edits stay safely queued locally; upon reconnection, choose Upload & Sync Now so your offline edits replace older cloud data.',
-    '- Signing in with Google requires verifying a 6-digit code (delivered to Gmail when SMTP is set, or via Google-verified session confirmation); system health and sync alerts appear cleanly at the top of the screen.',
+    '- Signing in with Google automatically emails a 6-digit verification code to your Gmail (with send permission, or via OAuth fallback); public link health and sync alerts appear cleanly at the top of the screen.',
+    '- Sign in with Google and verify the 6-digit Gmail code to set a Portable Password Lock before using Import, Export, Print, Folder Sync, Restore, or optional Biometrics Fingerprint.',
     '- When new updates are published on the public web link, read the automatic changelog popup and click OK to confirm or refresh cleanly.',
   ];
 

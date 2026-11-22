@@ -120,6 +120,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     return embeddedLock || getStoredPortableLock();
   };
 
+  const isPortableLockSet = Boolean(getActiveLockMeta());
+
   const requireLockPassword = (title: string, description: string, action: () => void) => {
     const activeLock = getActiveLockMeta();
     if (!activeLock) {
@@ -515,6 +517,18 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
         {/* Content Area */}
         <div className="p-6 overflow-y-auto overscroll-contain space-y-5 text-xs lg:text-sm flex-1 min-h-0">
+          {!isPortableLockSet && (
+            <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/90 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200 flex items-start gap-2.5 text-xs">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">Portable Password Lock Required</div>
+                <p className="text-[11px] opacity-90 mt-0.5 leading-snug">
+                  Export, Print/PDF, Import, and Starter Template buttons are disabled until you sign in with Google and set a Portable Password Lock in <strong>Settings</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Status Message */}
           {importStatus.type !== 'idle' && (
             <div
@@ -732,8 +746,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <div className="pt-2">
                 <button
                   type="button"
+                  disabled={!isPortableLockSet}
                   onClick={handleExecuteExport}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs lg:text-sm shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  title={
+                    !isPortableLockSet
+                      ? 'Set a Portable Password Lock in Settings first'
+                      : undefined
+                  }
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 text-white font-bold text-xs lg:text-sm shadow-md disabled:shadow-none transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <Download className="w-4 h-4" />
                   <span>
@@ -868,8 +888,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   {/* Option A: Direct Physical Print */}
                   <button
                     type="button"
+                    disabled={!isPortableLockSet}
                     onClick={() => handleExecutePrint(false)}
-                    className="p-3.5 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/40 hover:bg-blue-100/70 dark:hover:bg-blue-950/70 text-blue-900 dark:text-blue-200 transition-all flex items-center gap-3 text-left cursor-pointer group shadow-xs"
+                    title={
+                      !isPortableLockSet
+                        ? 'Set a Portable Password Lock in Settings first'
+                        : undefined
+                    }
+                    className="p-3.5 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/40 hover:bg-blue-100/70 dark:hover:bg-blue-950/70 disabled:bg-slate-100 dark:disabled:bg-slate-800/70 disabled:border-slate-200 dark:disabled:border-slate-700 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:opacity-60 disabled:grayscale text-blue-900 dark:text-blue-200 transition-all flex items-center gap-3 text-left cursor-pointer disabled:cursor-not-allowed group shadow-xs disabled:shadow-none"
                   >
                     <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
                       <Printer className="w-5 h-5" />
@@ -888,8 +914,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   {/* Option B: Save as PDF */}
                   <button
                     type="button"
+                    disabled={!isPortableLockSet}
                     onClick={() => handleExecutePrint(true)}
-                    className="p-3.5 rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-950/40 hover:bg-rose-100/70 dark:hover:bg-rose-950/70 text-rose-950 dark:text-rose-200 transition-all flex items-center gap-3 text-left cursor-pointer group shadow-xs"
+                    title={
+                      !isPortableLockSet
+                        ? 'Set a Portable Password Lock in Settings first'
+                        : undefined
+                    }
+                    className="p-3.5 rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-950/40 hover:bg-rose-100/70 dark:hover:bg-rose-950/70 disabled:bg-slate-100 dark:disabled:bg-slate-800/70 disabled:border-slate-200 dark:disabled:border-slate-700 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:opacity-60 disabled:grayscale text-rose-950 dark:text-rose-200 transition-all flex items-center gap-3 text-left cursor-pointer disabled:cursor-not-allowed group shadow-xs disabled:shadow-none"
                   >
                     <div className="w-9 h-9 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
                       <FileDown className="w-5 h-5" />
@@ -928,9 +960,16 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-2">
                   Upload Excel File (.xlsx, .xls) or CSV
                 </label>
-                <div
+                <button
+                  type="button"
+                  disabled={!isPortableLockSet}
                   onClick={handleTriggerFileImport}
-                  className="border-2 border-dashed border-emerald-400 dark:border-emerald-600 hover:border-emerald-600 dark:hover:border-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/50 rounded-xl p-6 text-center cursor-pointer transition-colors"
+                  title={
+                    !isPortableLockSet
+                      ? 'Set a Portable Password Lock in Settings first'
+                      : undefined
+                  }
+                  className="w-full border-2 border-dashed border-emerald-400 dark:border-emerald-600 hover:border-emerald-600 dark:hover:border-emerald-400 disabled:border-slate-300 dark:disabled:border-slate-700 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/50 disabled:bg-slate-100 dark:disabled:bg-slate-800/60 disabled:opacity-55 disabled:grayscale rounded-xl p-6 text-center cursor-pointer disabled:cursor-not-allowed transition-colors"
                 >
                   <input
                     ref={fileInputRef}
@@ -946,7 +985,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   <div className="text-[11px] lg:text-xs text-slate-600 dark:text-slate-300 mt-1">
                     Extracts values, formulas, comments, and remarks automatically. No limits on rows, sheets, or date ranges!
                   </div>
-                </div>
+                </button>
               </div>
 
               {/* Paste Text Area */}
@@ -970,8 +1009,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   <button
                     type="button"
                     onClick={handlePasteSubmit}
-                    disabled={!pastedText.trim()}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs lg:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:opacity-50 rounded-lg shadow-xs cursor-pointer"
+                    disabled={!isPortableLockSet || !pastedText.trim()}
+                    title={
+                      !isPortableLockSet
+                        ? 'Set a Portable Password Lock in Settings first'
+                        : undefined
+                    }
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs lg:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 rounded-lg shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
                   >
                     <ArrowRight className="w-3.5 h-3.5" />
                     Parse & Import Pasted Table
@@ -994,8 +1038,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   </div>
                   <button
                     type="button"
+                    disabled={!isPortableLockSet}
                     onClick={() => setShowSeedConfirm((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs lg:text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 rounded-lg shadow-xs cursor-pointer shrink-0"
+                    title={
+                      !isPortableLockSet
+                        ? 'Set a Portable Password Lock in Settings first'
+                        : undefined
+                    }
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs lg:text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 rounded-lg shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed shrink-0"
                   >
                     Load Jan–Oct 2026
                   </button>
@@ -1018,8 +1068,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                       </button>
                       <button
                         type="button"
+                        disabled={!isPortableLockSet}
                         onClick={handleSeedHistory}
-                        className="px-3 py-1 text-[11px] lg:text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 rounded cursor-pointer"
+                        className="px-3 py-1 text-[11px] lg:text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 rounded cursor-pointer disabled:cursor-not-allowed"
                       >
                         Confirm Load
                       </button>
@@ -1038,8 +1089,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   </div>
                   <button
                     type="button"
+                    disabled={!isPortableLockSet}
                     onClick={handleDownloadXlsxTemplate}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs lg:text-sm font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shadow-xs cursor-pointer shrink-0"
+                    title={
+                      !isPortableLockSet
+                        ? 'Set a Portable Password Lock in Settings first'
+                        : undefined
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs lg:text-sm font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 rounded-lg shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed shrink-0"
                   >
                     <Download className="w-3.5 h-3.5" />
                     Download .XLSX Template

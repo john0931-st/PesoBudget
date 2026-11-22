@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { TopToastItem } from '../types/budget';
 
 export const PUBLIC_LINK_URL =
-  'https://ais-pre-juv42jdfqkfmr4uvlolrey-190160227104.asia-east1.run.app';
+  'https://pesobudget-smart-philippine-expense-payroll-track.ai.studio/';
 
 export interface PublicLinkStatus {
   state: 'checking' | 'healthy' | 'degraded' | 'offline';

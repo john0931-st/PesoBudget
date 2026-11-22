@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Lock, Eye, EyeOff, AlertCircle, KeyRound, X, ShieldCheck } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertCircle, KeyRound, X, ShieldCheck, Fingerprint } from 'lucide-react';
 import {
   markSessionUnlocked,
   verifyPortableLockPassword,
   type PortableLockMetadata,
 } from '../utils/portableCrypto';
+import {
+  hasBiometricEnrollmentForLock,
+  isWebAuthnSupported,
+  unlockPortableLockWithBiometric,
+} from '../utils/portableBiometrics';
 
 interface PasswordConfirmModalProps {
   isOpen: boolean;
@@ -26,12 +31,14 @@ export const PasswordConfirmModal: React.FC<PasswordConfirmModalProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isBiometricVerifying, setIsBiometricVerifying] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setPassword('');
       setShowPassword(false);
       setError(null);
+      setIsBiometricVerifying(false);
     }
   }, [isOpen, actionTitle]);
 
@@ -48,6 +55,26 @@ export const PasswordConfirmModal: React.FC<PasswordConfirmModalProps> = ({
   }, [isOpen, onCancel]);
 
   if (!isOpen || !lockMeta) return null;
+
+  const canUseBiometric = hasBiometricEnrollmentForLock(lockMeta) && isWebAuthnSupported();
+
+  const handleBiometricVerify = async () => {
+    setIsBiometricVerifying(true);
+    setError(null);
+    try {
+      const recoveredPassword = await unlockPortableLockWithBiometric(lockMeta);
+      markSessionUnlocked(lockMeta.lockId, recoveredPassword);
+      setIsBiometricVerifying(false);
+      onConfirm(recoveredPassword);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Fingerprint verification failed. Enter your password instead.'
+      );
+      setIsBiometricVerifying(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,17 +178,30 @@ export const PasswordConfirmModal: React.FC<PasswordConfirmModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-1">
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+            {canUseBiometric && (
+              <button
+                type="button"
+                disabled={isBiometricVerifying}
+                onClick={() => void handleBiometricVerify()}
+                className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-700 rounded-lg cursor-pointer transition-colors disabled:opacity-60"
+              >
+                <Fingerprint className="w-3.5 h-3.5" />
+                <span>{isBiometricVerifying ? 'Scanning...' : 'Use Fingerprint'}</span>
+              </button>
+            )}
             <button
               type="button"
+              disabled={isBiometricVerifying}
               onClick={onCancel}
-              className="px-3 py-1.5 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+              className="px-3 py-1.5 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-3.5 py-1.5 text-xs lg:text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 dark:bg-emerald-600 dark:hover:bg-emerald-500 rounded-lg shadow-xs cursor-pointer transition-colors"
+              disabled={isBiometricVerifying}
+              className="px-3.5 py-1.5 text-xs lg:text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 dark:bg-emerald-600 dark:hover:bg-emerald-500 rounded-lg shadow-xs cursor-pointer transition-colors disabled:opacity-60"
             >
               Verify &amp; Continue
             </button>

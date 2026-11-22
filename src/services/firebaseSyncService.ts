@@ -13,13 +13,15 @@ import {
   where,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { signInWithPopup, signOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut, type User } from 'firebase/auth';
 import {
   auth,
   db,
+  getGoogleOAuthAccessToken,
   googleProvider,
   handleFirestoreError,
   OperationType,
+  setGoogleOAuthAccessToken,
 } from '../firebase';
 import type {
   AdminUserRecord,
@@ -152,39 +154,51 @@ export async function beginGoogleSignInPopup(): Promise<User> {
   }
   setOtpChallengeActive(true);
   try {
-    const credential = await signInWithPopup(auth, googleProvider);
-    return credential.user;
+    const result = await signInWithPopup(auth, googleProvider);
+    const oauthCredential = GoogleAuthProvider.credentialFromResult(result);
+    setGoogleOAuthAccessToken(oauthCredential?.accessToken ?? null);
+    return result.user;
   } catch (err) {
+    setGoogleOAuthAccessToken(null);
     setOtpChallengeActive(false);
     throw err;
   }
 }
 
 export type OtpDeliveryMode = 'email' | 'oauth_session_code';
+export type OtpDeliveryProvider = 'smtp' | 'resend' | 'gmail_api' | 'oauth_session';
 
 export interface OtpDispatchResult {
   maskedEmail: string;
   expiresInSeconds: number;
   deliveryMode: OtpDeliveryMode;
+  provider?: OtpDeliveryProvider;
   smtpConfigured: boolean;
   sessionCode?: string;
 }
 
 /**
  * Step 2 of strict Google Sign-In: asks the backend server (authenticated with
- * the user's live Google/Firebase ID token) to issue a 6-digit verification code.
+ * the user's live Google/Firebase ID token and optional in-memory Gmail API token)
+ * to send a 6-digit verification code automatically to the user's Gmail inbox.
  */
 export async function requestGmailVerificationOtp(
   user: User
 ): Promise<OtpDispatchResult> {
   const email = user.email?.trim() || '';
   const idToken = await user.getIdToken();
+  const gmailAccessToken = getGoogleOAuthAccessToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${idToken}`,
+  };
+  if (gmailAccessToken) {
+    headers['X-Google-Access-Token'] = gmailAccessToken;
+  }
+
   const res = await fetch('/api/auth/send-otp', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
+    headers,
     body: JSON.stringify({
       email,
       name: user.displayName || undefined,
@@ -195,6 +209,7 @@ export async function requestGmailVerificationOtp(
     maskedEmail?: string;
     expiresInSeconds?: number;
     deliveryMode?: OtpDeliveryMode;
+    provider?: OtpDeliveryProvider;
     smtpConfigured?: boolean;
     sessionCode?: string;
     error?: string;
@@ -206,6 +221,7 @@ export async function requestGmailVerificationOtp(
     maskedEmail: payload.maskedEmail || email,
     expiresInSeconds: payload.expiresInSeconds || 600,
     deliveryMode: payload.deliveryMode || (payload.smtpConfigured ? 'email' : 'oauth_session_code'),
+    provider: payload.provider,
     smtpConfigured: Boolean(payload.smtpConfigured),
     sessionCode: payload.sessionCode,
   };
@@ -259,6 +275,7 @@ export async function completeGoogleSignInWithOtp(
 
 export async function signOutFirebase(): Promise<void> {
   setOtpChallengeActive(false);
+  setGoogleOAuthAccessToken(null);
   clearLocalEmailOtpVerification();
   await signOut(auth);
 }

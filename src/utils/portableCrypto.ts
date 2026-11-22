@@ -429,6 +429,7 @@ export function saveStoredPortableLock(meta: PortableLockMetadata | null): void 
   try {
     if (!meta) {
       localStorage.removeItem(PORTABLE_LOCK_STORAGE_KEY);
+      localStorage.removeItem('pesobudget_portable_biometrics_v1');
       sessionStorage.removeItem(SESSION_UNLOCKED_KEY);
       sessionPortablePassword = null;
     } else {

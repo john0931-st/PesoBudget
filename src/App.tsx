@@ -49,7 +49,7 @@ import {
   isEmailOtpVerifiedLocally,
   isOtpChallengeActive,
 } from './services/firebaseSyncService';
-import { auth } from './firebase';
+import { auth, setGoogleOAuthAccessToken } from './firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 
 import { TopNav, SaveSyncActivity } from './components/TopNav';
@@ -463,6 +463,7 @@ export default function App() {
           });
         }
       } else {
+        setGoogleOAuthAccessToken(null);
         setSecurityProfile((prev) => {
           const updated: UserSecurityProfile = {
             ...prev,

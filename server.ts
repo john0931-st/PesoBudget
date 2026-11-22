@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
 const CANONICAL_PUBLIC_URL =
-  'https://ais-pre-juv42jdfqkfmr4uvlolrey-190160227104.asia-east1.run.app';
+  'https://pesobudget-smart-philippine-expense-payroll-track.ai.studio/';
 const OTP_HMAC_SECRET =
   process.env.OTP_SECRET || crypto.randomBytes(32).toString('hex');
 
@@ -205,25 +205,11 @@ function isEmailDeliveryConfigured(): boolean {
   return Boolean((smtpUser && smtpPass) || resendApiKey);
 }
 
-async function deliverOtpEmail(
-  toEmail: string,
-  displayName: string,
-  code: string
-): Promise<{ delivered: boolean; provider?: string; error?: string }> {
-  const gmailUser = process.env.GMAIL_USER?.trim();
-  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.trim();
-  const smtpHost = process.env.SMTP_HOST?.trim();
-  const smtpPort = Number(process.env.SMTP_PORT || 465);
-  const smtpUser = process.env.SMTP_USER?.trim() || gmailUser;
-  const smtpPass = process.env.SMTP_PASS?.trim() || gmailAppPassword;
-  const smtpFrom =
-    process.env.SMTP_FROM?.trim() ||
-    (smtpUser ? `PesoBudget Security <${smtpUser}>` : 'PesoBudget Security <no-reply@pesobudget.app>');
-  const resendApiKey = process.env.RESEND_API_KEY?.trim();
-
+function buildOtpEmailContent(displayName: string, code: string) {
+  const safeName = (displayName || 'there').replace(/[\r\n<>&"']/g, '').slice(0, 120) || 'there';
   const subject = `PesoBudget Verification Code: ${code}`;
   const textBody = [
-    `Hello ${displayName || 'there'},`,
+    `Hello ${safeName},`,
     '',
     `Your PesoBudget Gmail verification code is: ${code}`,
     '',
@@ -236,7 +222,7 @@ async function deliverOtpEmail(
       <div style="font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #34d399; margin-bottom: 8px;">PesoBudget Security</div>
       <h2 style="margin: 0 0 12px; font-size: 20px; color: #ffffff;">Gmail Sign-In Verification Code</h2>
       <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: #cbd5e1;">
-        Hi ${displayName ? displayName.replace(/[<>&"]/g, '') : 'there'}, use the 6-digit verification code below to confirm your Google sign-in:
+        Hi ${safeName}, use the 6-digit verification code below to confirm your Google sign-in:
       </p>
       <div style="background: #020617; border: 1px solid #10b981; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 20px;">
         <span style="font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 800; letter-spacing: 0.25em; color: #34d399;">${code}</span>
@@ -246,6 +232,26 @@ async function deliverOtpEmail(
       </p>
     </div>
   `;
+
+  return { subject, textBody, htmlBody };
+}
+
+async function deliverOtpEmail(
+  toEmail: string,
+  displayName: string,
+  code: string
+): Promise<{ delivered: boolean; provider?: 'smtp' | 'resend'; error?: string }> {
+  const gmailUser = process.env.GMAIL_USER?.trim();
+  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.trim();
+  const smtpHost = process.env.SMTP_HOST?.trim();
+  const smtpPort = Number(process.env.SMTP_PORT || 465);
+  const smtpUser = process.env.SMTP_USER?.trim() || gmailUser;
+  const smtpPass = process.env.SMTP_PASS?.trim() || gmailAppPassword;
+  const smtpFrom =
+    process.env.SMTP_FROM?.trim() ||
+    (smtpUser ? `PesoBudget Security <${smtpUser}>` : 'PesoBudget Security <no-reply@pesobudget.app>');
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  const { subject, textBody, htmlBody } = buildOtpEmailContent(displayName, code);
 
   if (smtpUser && smtpPass) {
     const transporter = nodemailer.createTransport({
@@ -293,6 +299,54 @@ async function deliverOtpEmail(
     delivered: false,
     error: 'Email SMTP is not configured in environment secrets.',
   };
+}
+
+async function deliverOtpViaGmailApi(
+  accessToken: string,
+  toEmail: string,
+  displayName: string,
+  code: string
+): Promise<{ delivered: boolean; error?: string }> {
+  const cleanToken = accessToken.trim();
+  if (!cleanToken || /\s/.test(cleanToken) || cleanToken.length < 20 || cleanToken.length > 4096) {
+    return { delivered: false, error: 'Missing or invalid Gmail OAuth access token.' };
+  }
+
+  const safeTo = toEmail.replace(/[\r\n]/g, '').trim();
+  const { subject, htmlBody } = buildOtpEmailContent(displayName, code);
+  const safeSubject = subject.replace(/[\r\n]/g, '');
+
+  const mimeMessage = [
+    `From: PesoBudget Security <${safeTo}>`,
+    `To: ${safeTo}`,
+    `Subject: ${safeSubject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset="UTF-8"',
+    '',
+    htmlBody,
+  ].join('\r\n');
+
+  const raw = Buffer.from(mimeMessage, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cleanToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => `HTTP ${res.status}`);
+    return { delivered: false, error: `Gmail API send failed (${res.status}): ${detail.slice(0, 240)}` };
+  }
+
+  return { delivered: true };
 }
 
 function isAllowedHealthUrl(rawUrl: string, requestHost?: string): string | null {
@@ -425,50 +479,59 @@ async function createServer() {
     });
 
     const smtpConfigured = isEmailDeliveryConfigured();
-    if (!smtpConfigured) {
-      // Google OAuth + RS256 Firebase ID token is already cryptographically verified;
-      // issue a one-time confirmation code for this verified Google session so the public link never locks out users.
-      res.json({
-        ok: true,
-        deliveryMode: 'oauth_session_code',
-        smtpConfigured: false,
-        maskedEmail: maskEmail(email),
-        expiresInSeconds: 600,
-        sessionCode: code,
-      });
-      return;
-    }
+    const gmailAccessToken = (req.get('x-google-access-token') || '').trim();
 
-    try {
-      const delivery = await deliverOtpEmail(email, displayName, code);
-      if (!delivery.delivered) {
-        otpStore.delete(storeKey);
-        res.status(502).json({
-          ok: false,
-          smtpConfigured: true,
-          error: delivery.error || 'Email delivery failed.',
-        });
-        return;
+    // 1. Server-configured SMTP or Resend if present
+    if (smtpConfigured) {
+      try {
+        const delivery = await deliverOtpEmail(email, displayName, code);
+        if (delivery.delivered) {
+          res.json({
+            ok: true,
+            deliveryMode: 'email',
+            provider: delivery.provider || 'smtp',
+            smtpConfigured: true,
+            maskedEmail: maskEmail(email),
+            expiresInSeconds: 600,
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('Configured SMTP/Resend delivery failed, attempting Gmail API fallback:', err);
       }
-
-      res.json({
-        ok: true,
-        deliveryMode: 'email',
-        smtpConfigured: true,
-        maskedEmail: maskEmail(email),
-        expiresInSeconds: 600,
-      });
-    } catch (err) {
-      otpStore.delete(storeKey);
-      res.status(502).json({
-        ok: false,
-        smtpConfigured: true,
-        error:
-          err instanceof Error
-            ? `Failed to send Gmail code: ${err.message}`
-            : 'Failed to send Gmail verification email.',
-      });
     }
+
+    // 2. Zero-config Gmail API (gmail.send OAuth token granted by signed-in user)
+    if (gmailAccessToken) {
+      try {
+        const gmailResult = await deliverOtpViaGmailApi(gmailAccessToken, email, displayName, code);
+        if (gmailResult.delivered) {
+          res.json({
+            ok: true,
+            deliveryMode: 'email',
+            provider: 'gmail_api',
+            smtpConfigured,
+            maskedEmail: maskEmail(email),
+            expiresInSeconds: 600,
+          });
+          return;
+        }
+        console.warn('Gmail API OTP delivery fallback:', gmailResult.error);
+      } catch (err) {
+        console.warn('Gmail API OTP request exception:', err);
+      }
+    }
+
+    // 3. Verified Google OAuth session fallback so users are never locked out
+    res.json({
+      ok: true,
+      deliveryMode: 'oauth_session_code',
+      provider: 'oauth_session',
+      smtpConfigured,
+      maskedEmail: maskEmail(email),
+      expiresInSeconds: 600,
+      sessionCode: code,
+    });
   });
 
   // Strict Google Sign-In OTP Verification (requires valid Google Firebase ID Token)

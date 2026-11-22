@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Eye, EyeOff, ShieldCheck, AlertCircle, KeyRound } from 'lucide-react';
+import { Lock, Eye, EyeOff, ShieldCheck, AlertCircle, KeyRound, Fingerprint } from 'lucide-react';
 import {
   decryptTextWithPassword,
   markSessionUnlocked,
@@ -8,6 +8,11 @@ import {
   type EncryptedEnvelope,
   type PortableLockMetadata,
 } from '../utils/portableCrypto';
+import {
+  hasBiometricEnrollmentForLock,
+  isWebAuthnSupported,
+  unlockPortableLockWithBiometric,
+} from '../utils/portableBiometrics';
 import { hydrateSeedObject } from '../utils/portableSeed';
 
 interface PortableLockScreenProps {
@@ -25,6 +30,21 @@ export const PortableLockScreen: React.FC<PortableLockScreenProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isBiometricUnlocking, setIsBiometricUnlocking] = useState(false);
+
+  const canUseBiometric = hasBiometricEnrollmentForLock(lockMeta) && isWebAuthnSupported();
+
+  const finishUnlockWithPassword = (verifiedPassword: string) => {
+    if (encryptedSeed) {
+      const decryptedJson = decryptTextWithPassword(encryptedSeed, verifiedPassword);
+      const parsedSeed = JSON.parse(decryptedJson);
+      hydrateSeedObject(parsedSeed);
+    }
+
+    saveStoredPortableLock(lockMeta);
+    markSessionUnlocked(lockMeta.lockId, verifiedPassword);
+    onUnlocked();
+  };
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,15 +64,7 @@ export const PortableLockScreen: React.FC<PortableLockScreenProps> = ({
         return;
       }
 
-      if (encryptedSeed) {
-        const decryptedJson = decryptTextWithPassword(encryptedSeed, password);
-        const parsedSeed = JSON.parse(decryptedJson);
-        hydrateSeedObject(parsedSeed);
-      }
-
-      saveStoredPortableLock(lockMeta);
-      markSessionUnlocked(lockMeta.lockId, password);
-      onUnlocked();
+      finishUnlockWithPassword(password);
     } catch (err) {
       setError(
         err instanceof Error && err.message.includes('Incorrect password')
@@ -60,6 +72,22 @@ export const PortableLockScreen: React.FC<PortableLockScreenProps> = ({
           : 'Could not unlock workbook. Please check your password.'
       );
       setIsUnlocking(false);
+    }
+  };
+
+  const handleBiometricUnlock = async () => {
+    setIsBiometricUnlocking(true);
+    setError(null);
+    try {
+      const recoveredPassword = await unlockPortableLockWithBiometric(lockMeta);
+      finishUnlockWithPassword(recoveredPassword);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Fingerprint verification failed. Please enter your password.'
+      );
+      setIsBiometricUnlocking(false);
     }
   };
 
@@ -131,11 +159,25 @@ export const PortableLockScreen: React.FC<PortableLockScreenProps> = ({
 
           <button
             type="submit"
-            disabled={isUnlocking}
+            disabled={isUnlocking || isBiometricUnlocking}
             className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold text-sm lg:text-base rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-60"
           >
             {isUnlocking ? 'Decrypting...' : 'Unlock'}
           </button>
+
+          {canUseBiometric && (
+            <button
+              type="button"
+              onClick={() => void handleBiometricUnlock()}
+              disabled={isUnlocking || isBiometricUnlocking}
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-bold text-sm lg:text-base rounded-xl transition-colors cursor-pointer disabled:opacity-60"
+            >
+              <Fingerprint className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                {isBiometricUnlocking ? 'Scanning Fingerprint...' : 'Unlock with Fingerprint'}
+              </span>
+            </button>
+          )}
         </form>
       </div>
     </div>

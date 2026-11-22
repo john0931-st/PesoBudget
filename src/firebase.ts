@@ -32,11 +32,24 @@ function createFirestoreInstance(): Firestore {
   return getFirestore(app, firebaseConfig.firestoreDatabaseId);
 }
 
-// Connect to the provisioned Enterprise/Standard Firestore database ID with offline IndexedDB persistence
+export const GMAIL_SEND_SCOPES = ['https://www.googleapis.com/auth/gmail.send'] as const;
+
 export const db = createFirestoreInstance();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+GMAIL_SEND_SCOPES.forEach((scope) => googleProvider.addScope(scope));
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// In-memory only Google OAuth access token (never stored in localStorage or sessionStorage)
+let cachedGoogleOAuthAccessToken: string | null = null;
+
+export function setGoogleOAuthAccessToken(token: string | null): void {
+  cachedGoogleOAuthAccessToken = token && token.trim() ? token.trim() : null;
+}
+
+export function getGoogleOAuthAccessToken(): string | null {
+  return cachedGoogleOAuthAccessToken;
+}
 
 export enum OperationType {
   CREATE = 'create',
