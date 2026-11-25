@@ -1,12 +1,31 @@
 {
   "hosting": {
+    "site": "pesobudget-ph",
     "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**",
-      "android-studio-bundle.json",
-      "portable-html-bundle.json"
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "/@(index.html|version.json|sw.js|portable-html-bundle.json|android-studio-bundle.json)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, no-cache, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      }
     ],
     "rewrites": [
       {

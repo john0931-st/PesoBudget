@@ -177,85 +177,255 @@ export interface OtpDispatchResult {
   sessionCode?: string;
 }
 
+interface ClientOtpRecord {
+  digestHex: string;
+  uid: string;
+  expiresAt: number;
+  lastSentAt: number;
+  attempts: number;
+}
+
+const clientOtpStore = new Map<string, ClientOtpRecord>();
+const clientOtpSessionSecret =
+  typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function'
+    ? Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+    : `${Date.now()}_${Math.random()}`;
+
+function maskEmailAddress(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return email;
+  if (local.length <= 2) return `${local[0] || '*'}*@${domain}`;
+  return `${local.slice(0, 2)}${'*'.repeat(Math.min(6, local.length - 2))}@${domain}`;
+}
+
+function generateSecureSixDigitCode(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const limit = Math.floor(0x100000000 / 900000) * 900000;
+    const buf = new Uint32Array(1);
+    while (true) {
+      crypto.getRandomValues(buf);
+      if (buf[0] < limit) {
+        return String(100000 + (buf[0] % 900000));
+      }
+    }
+  }
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function computeOtpDigestHex(uid: string, email: string, code: string): Promise<string> {
+  const input = `${clientOtpSessionSecret}:${uid}:${email}:${code}`;
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const bytes = new TextEncoder().encode(input);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  return input;
+}
+
+function constantTimeHexEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function pruneExpiredClientOtps(): void {
+  const now = Date.now();
+  for (const [key, record] of clientOtpStore.entries()) {
+    if (record.expiresAt <= now) {
+      clientOtpStore.delete(key);
+    }
+  }
+}
+
+function encodeUtf8Base64Url(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function sendOtpViaBrowserGmailApi(
+  accessToken: string,
+  toEmail: string,
+  displayName: string,
+  code: string
+): Promise<boolean> {
+  const cleanToken = accessToken.trim();
+  if (!cleanToken || /\s/.test(cleanToken) || cleanToken.length < 20 || cleanToken.length > 4096) {
+    return false;
+  }
+
+  const safeTo = toEmail.replace(/[\r\n<>]/g, '').trim();
+  const safeName =
+    (displayName || 'there').replace(/[\r\n<>&"']/g, '').trim().slice(0, 120) || 'there';
+  const subject = `PesoBudget Verification Code: ${code}`;
+
+  const htmlBody = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #0f172a; color: #f8fafc; padding: 28px; border-radius: 16px; border: 1px solid #1e293b;">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #34d399; margin-bottom: 8px;">PesoBudget Security</div>
+      <h2 style="margin: 0 0 12px; font-size: 20px; color: #ffffff;">Gmail Sign-In Verification Code</h2>
+      <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: #cbd5e1;">
+        Hi ${safeName}, use the 6-digit verification code below to confirm your Google account:
+      </p>
+      <div style="background: #020617; border: 1px solid #10b981; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 20px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 800; letter-spacing: 0.25em; color: #34d399;">${code}</span>
+      </div>
+      <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #94a3b8;">
+        Expires in 10 minutes. Never share this verification code with anyone.
+      </p>
+    </div>
+  `;
+
+  const mimeMessage = [
+    `From: PesoBudget Security <${safeTo}>`,
+    `To: ${safeTo}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset="UTF-8"',
+    '',
+    htmlBody,
+  ].join('\r\n');
+
+  const raw = encodeUtf8Base64Url(mimeMessage);
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cleanToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw }),
+  });
+
+  return res.ok;
+}
+
 /**
- * Step 2 of strict Google Sign-In: asks the backend server (authenticated with
- * the user's live Google/Firebase ID token and optional in-memory Gmail API token)
- * to send a 6-digit verification code automatically to the user's Gmail inbox.
+ * Step 2 of strict Google Sign-In: generates a cryptographically random 6-digit code
+ * in browser memory and emails it directly via the user's Google OAuth Gmail API token
+ * (no backend server required), with an OAuth session confirmation fallback if declined.
  */
 export async function requestGmailVerificationOtp(
   user: User
 ): Promise<OtpDispatchResult> {
-  const email = user.email?.trim() || '';
-  const idToken = await user.getIdToken();
-  const gmailAccessToken = getGoogleOAuthAccessToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${idToken}`,
-  };
-  if (gmailAccessToken) {
-    headers['X-Google-Access-Token'] = gmailAccessToken;
+  pruneExpiredClientOtps();
+
+  const email = (user.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Google account must have a valid Gmail/email address.');
+  }
+  if (!user.uid) {
+    throw new Error('Google sign-in session is missing a valid user ID.');
   }
 
-  const res = await fetch('/api/auth/send-otp', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      email,
-      name: user.displayName || undefined,
-    }),
-  });
-  const payload = (await res.json().catch(() => ({}))) as {
-    ok?: boolean;
-    maskedEmail?: string;
-    expiresInSeconds?: number;
-    deliveryMode?: OtpDeliveryMode;
-    provider?: OtpDeliveryProvider;
-    smtpConfigured?: boolean;
-    sessionCode?: string;
-    error?: string;
-  };
-  if (!res.ok || !payload.ok) {
-    throw new Error(payload.error || 'Failed to issue verification code for your Google account.');
+  const storeKey = `${user.uid}:${email}`;
+  const now = Date.now();
+  const existing = clientOtpStore.get(storeKey);
+  if (existing && now - existing.lastSentAt < 15_000) {
+    const waitSec = Math.ceil((15_000 - (now - existing.lastSentAt)) / 1000);
+    throw new Error(`Please wait ${waitSec}s before requesting another code.`);
   }
+
+  const code = generateSecureSixDigitCode();
+  const digestHex = await computeOtpDigestHex(user.uid, email, code);
+  clientOtpStore.set(storeKey, {
+    digestHex,
+    uid: user.uid,
+    expiresAt: now + 10 * 60 * 1000,
+    lastSentAt: now,
+    attempts: 0,
+  });
+
+  const gmailAccessToken = getGoogleOAuthAccessToken();
+  if (gmailAccessToken) {
+    try {
+      const sent = await sendOtpViaBrowserGmailApi(
+        gmailAccessToken,
+        email,
+        user.displayName || '',
+        code
+      );
+      if (sent) {
+        return {
+          maskedEmail: maskEmailAddress(email),
+          expiresInSeconds: 600,
+          deliveryMode: 'email',
+          provider: 'gmail_api',
+          smtpConfigured: false,
+        };
+      }
+    } catch (err) {
+      console.warn('Direct browser Gmail API send failed, using OAuth session confirmation fallback:', err);
+    }
+  }
+
   return {
-    maskedEmail: payload.maskedEmail || email,
-    expiresInSeconds: payload.expiresInSeconds || 600,
-    deliveryMode: payload.deliveryMode || (payload.smtpConfigured ? 'email' : 'oauth_session_code'),
-    provider: payload.provider,
-    smtpConfigured: Boolean(payload.smtpConfigured),
-    sessionCode: payload.sessionCode,
+    maskedEmail: maskEmailAddress(email),
+    expiresInSeconds: 600,
+    deliveryMode: 'oauth_session_code',
+    provider: 'oauth_session',
+    smtpConfigured: false,
+    sessionCode: code,
   };
 }
 
 /**
- * Step 3 of strict Google Sign-In: submits the 6-digit verification code entered by the user.
+ * Step 3 of strict Google Sign-In: verifies the 6-digit code against the in-memory Web Crypto digest.
  */
 export async function verifyGmailOtpCode(
   user: User,
   code: string
 ): Promise<{ verifiedAt: string; verificationToken: string }> {
-  const email = user.email?.trim() || '';
-  const idToken = await user.getIdToken();
-  const res = await fetch('/api/auth/verify-otp', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({ email, code }),
-  });
-  const payload = (await res.json().catch(() => ({}))) as {
-    ok?: boolean;
-    verifiedAt?: string;
-    verificationToken?: string;
-    error?: string;
-  };
-  if (!res.ok || !payload.ok || !payload.verifiedAt) {
-    throw new Error(payload.error || 'Invalid verification code.');
+  pruneExpiredClientOtps();
+
+  const email = (user.email || '').trim().toLowerCase();
+  const cleanCode = String(code || '').replace(/\D/g, '').trim();
+  if (!email || !user.uid || cleanCode.length !== 6) {
+    throw new Error('Enter the 6-digit verification code.');
   }
+
+  const storeKey = `${user.uid}:${email}`;
+  const record = clientOtpStore.get(storeKey);
+  if (!record) {
+    throw new Error('No active verification code found. Please request a new code.');
+  }
+
+  if (record.expiresAt <= Date.now()) {
+    clientOtpStore.delete(storeKey);
+    throw new Error('Verification code expired. Please send a new code.');
+  }
+
+  if (record.attempts >= 5) {
+    clientOtpStore.delete(storeKey);
+    throw new Error('Too many invalid attempts. Request a fresh verification code.');
+  }
+
+  const candidateHex = await computeOtpDigestHex(user.uid, email, cleanCode);
+  if (!constantTimeHexEqual(record.digestHex, candidateHex)) {
+    record.attempts += 1;
+    const remaining = Math.max(0, 5 - record.attempts);
+    throw new Error(
+      remaining > 0
+        ? `Incorrect verification code. ${remaining} attempt(s) remaining.`
+        : 'Too many invalid attempts. Request a fresh code.'
+    );
+  }
+
+  clientOtpStore.delete(storeKey);
+  const verifiedAt = new Date().toISOString();
+  const verificationToken = await computeOtpDigestHex(user.uid, email, verifiedAt);
   return {
-    verifiedAt: payload.verifiedAt,
-    verificationToken: payload.verificationToken || '',
+    verifiedAt,
+    verificationToken,
   };
 }
 
@@ -274,6 +444,7 @@ export async function completeGoogleSignInWithOtp(
 }
 
 export async function signOutFirebase(): Promise<void> {
+  clientOtpStore.clear();
   setOtpChallengeActive(false);
   setGoogleOAuthAccessToken(null);
   clearLocalEmailOtpVerification();

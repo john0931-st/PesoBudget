@@ -499,9 +499,14 @@ export default function App() {
     clearReconnectedFlag,
   } = useNetworkStatus();
 
-  // Background public link health monitor with top toast notifications
+  const isDeveloperAdmin = Boolean(
+    securityProfile.isAuthenticated && isDeveloperAdminEmail(securityProfile.email)
+  );
+
+  // Public link health monitor (active only for Developer Admin / Admin Console)
   const { linkStatus, checkPublicLink } = usePublicLinkMonitor({
     isOnline,
+    enabled: isDeveloperAdmin,
     onEmitToast: emitToast,
   });
 
@@ -3370,8 +3375,6 @@ export default function App() {
         }}
         onOpenAdmin={() => setIsAdminModalOpen(true)}
         onReplayTour={() => setIsTourOpen(true)}
-        linkStatus={linkStatus}
-        onCheckPublicLink={checkPublicLink}
         onEmitToast={emitToast}
       />
 

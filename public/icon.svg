@@ -1,14 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" rx="112" fill="#0f172a" />
-  <!-- subtle grid lines -->
-  <line x1="80" y1="180" x2="432" y2="180" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
-  <line x1="80" y1="270" x2="432" y2="270" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
-  <line x1="80" y1="360" x2="432" y2="360" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
-  <line x1="200" y1="100" x2="200" y2="412" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
-  <line x1="320" y1="100" x2="320" y2="412" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
-  <!-- Philippine Peso Glyph -->
-  <text x="256" y="320" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="220" text-anchor="middle" fill="#ffffff" letter-spacing="-2">₱</text>
-  <!-- Accent badge -->
-  <circle cx="390" cy="120" r="28" fill="#10b981" />
-  <circle cx="390" cy="120" r="14" fill="#facc15" />
+  <!-- subtle spreadsheet grid lines -->
+  <line x1="76" y1="176" x2="436" y2="176" stroke="#334155" stroke-width="4" stroke-opacity="0.45" />
+  <line x1="76" y1="256" x2="436" y2="256" stroke="#334155" stroke-width="4" stroke-opacity="0.45" />
+  <line x1="76" y1="336" x2="436" y2="336" stroke="#334155" stroke-width="4" stroke-opacity="0.45" />
+  <line x1="186" y1="96" x2="186" y2="416" stroke="#334155" stroke-width="4" stroke-opacity="0.45" />
+  <line x1="326" y1="96" x2="326" y2="416" stroke="#334155" stroke-width="4" stroke-opacity="0.45" />
+  <!-- Crisp geometric Philippine Peso (₱) glyph -->
+  <path
+    fill="#ffffff"
+    fill-rule="evenodd"
+    d="M 174 138 H 264 C 314 138 344 168 344 206 C 344 244 314 274 264 274 H 212 V 374 H 174 Z M 212 172 V 240 H 260 C 288 240 306 226 306 206 C 306 186 288 172 260 172 Z"
+  />
+  <rect x="148" y="182" width="218" height="17" rx="8.5" fill="#ffffff" />
+  <rect x="148" y="213" width="218" height="17" rx="8.5" fill="#ffffff" />
+  <!-- Accent emerald/gold badge -->
+  <circle cx="394" cy="118" r="30" fill="#10b981" />
+  <circle cx="394" cy="118" r="14" fill="#facc15" />
 </svg>

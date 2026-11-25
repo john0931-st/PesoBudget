@@ -1180,10 +1180,10 @@ export function downloadUserManualPdf(): {
         'Runs completely offline on the public link via precached PWA assets, tracks changes locally, and asks on reconnection whether to Upload & Sync or Discard Offline edits without losing offline updates.',
     },
     {
-      feature: 'Top Toasts & Public Link Monitor',
-      location: 'Top Notification Banner / Settings',
+      feature: 'Top Toasts & Admin Link Monitor',
+      location: 'Top Banner / Admin Console',
       explanation:
-        'Checks pesobudget-smart-philippine-expense-payroll-track.ai.studio availability automatically in the background and renders all alerts in modern top-anchored toast notifications.',
+        'Renders sync and authentication alerts in modern top-anchored toasts and provides Public Link Monitor diagnostics exclusively inside the Developer Admin Console.',
     },
     {
       feature: 'Welcome Tour & Admin Console',
@@ -1335,7 +1335,7 @@ export function downloadUserManualPdf(): {
     '- Use the Undo/Redo arrows in the table title bar or press Ctrl+Z / Ctrl+Y to revert or reapply changes, alongside Arrow keys, Tab, and Enter/F2 for fast keyboard entry.',
     '- Rename any payment or savings row inline under PAYMENTS and PesoBudget updates that label across Summary, Charts, and Reports automatically.',
     '- When working offline on the public link, edits stay safely queued locally; upon reconnection, choose Upload & Sync Now so your offline edits replace older cloud data.',
-    '- Signing in with Google automatically emails a 6-digit verification code to your Gmail (with send permission, or via OAuth fallback); public link health and sync alerts appear cleanly at the top of the screen.',
+    '- Signing in with Google automatically emails a 6-digit verification code to your Gmail (with send permission, or via OAuth fallback) directly in the browser; sync alerts appear cleanly at the top of the screen.',
     '- Sign in with Google and verify the 6-digit Gmail code to set a Portable Password Lock before using Import, Export, Print, Folder Sync, Restore, or optional Biometrics Fingerprint.',
     '- When new updates are published on the public web link, read the automatic changelog popup and click OK to confirm or refresh cleanly.',
   ];

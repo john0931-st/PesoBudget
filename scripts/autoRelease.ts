@@ -96,7 +96,6 @@ const EXACT_FILE_AREAS: Record<string, AreaInfo> = {
   'src/hooks/useTrackpadSwipe.ts': { area: 'Swipe Gestures', category: 'UI & Navigation' },
   'src/firebase.ts': { area: 'Firebase Configuration', category: 'Cloud & Offline Sync' },
   'src/types/budget.ts': { area: 'Budget Data Model', category: 'Formulas & Editing' },
-  'server.ts': { area: 'Backend OTP & Health Server', category: 'Security & Auth' },
   'index.html': { area: 'App Shell & Metadata', category: 'PWA & Assets' },
   'package.json': { area: 'App Package & Version', category: 'App Configuration' },
 };
@@ -158,7 +157,6 @@ export function computeSourceBuildId(rootDir: string): string {
   const hash = crypto.createHash('sha256');
   const targets = [
     path.resolve(rootDir, 'src'),
-    path.resolve(rootDir, 'server.ts'),
     path.resolve(rootDir, 'index.html'),
     path.resolve(rootDir, 'public'),
   ];

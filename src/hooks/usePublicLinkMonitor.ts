@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { TopToastItem } from '../types/budget';
 
 export const PUBLIC_LINK_URL =
-  'https://pesobudget-smart-philippine-expense-payroll-track.ai.studio/';
+  'https://pesobudget-ph.web.app/';
 
 export interface PublicLinkStatus {
   state: 'checking' | 'healthy' | 'degraded' | 'offline';
@@ -14,11 +14,13 @@ export interface PublicLinkStatus {
 
 interface UsePublicLinkMonitorOptions {
   isOnline: boolean;
+  enabled?: boolean;
   onEmitToast: (toast: Omit<TopToastItem, 'id'>) => void;
 }
 
 export function usePublicLinkMonitor({
   isOnline,
+  enabled = false,
   onEmitToast,
 }: UsePublicLinkMonitorOptions) {
   const [linkStatus, setLinkStatus] = useState<PublicLinkStatus>({
@@ -38,7 +40,7 @@ export function usePublicLinkMonitor({
         checkedAt: new Date().toISOString(),
         detail: 'Device is offline; app runs from local offline storage.',
       });
-      if (forceToast || lastAnnouncedStateRef.current !== 'offline') {
+      if (forceToast) {
         lastAnnouncedStateRef.current = 'offline';
         onEmitToastRef.current({
           type: 'warning',
@@ -50,61 +52,103 @@ export function usePublicLinkMonitor({
       return;
     }
 
-    try {
-      const res = await fetch(
-        `/api/health-check?url=${encodeURIComponent(PUBLIC_LINK_URL)}`,
-        { cache: 'no-store' }
-      );
-      if (!res.ok) {
-        throw new Error(`Health endpoint returned ${res.status}`);
-      }
-      const data = (await res.json()) as {
-        ok: boolean;
-        status?: number;
-        statusText?: string;
-        latencyMs?: number;
-        checkedAt?: string;
-      };
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6500);
 
-      if (data.ok) {
-        const nextStatus: PublicLinkStatus = {
-          state: 'healthy',
-          statusCode: data.status || 200,
-          latencyMs: data.latencyMs,
-          checkedAt: data.checkedAt || new Date().toISOString(),
-          detail: `Public link online (${data.status || 200} · ${data.latencyMs ?? 0}ms)`,
-        };
-        setLinkStatus(nextStatus);
-        if (forceToast || lastAnnouncedStateRef.current !== 'healthy') {
-          lastAnnouncedStateRef.current = 'healthy';
-          onEmitToastRef.current({
-            type: 'success',
-            title: 'Public Link Online & Healthy',
-            message: `Verified ${new URL(PUBLIC_LINK_URL).host} (${data.status || 200} OK · ${data.latencyMs ?? 0}ms)`,
-            durationMs: 3600,
+    try {
+      const targetUrl = new URL(PUBLIC_LINK_URL);
+      const isSameOrigin =
+        typeof window !== 'undefined' && window.location.origin === targetUrl.origin;
+
+      if (isSameOrigin) {
+        let res = await fetch(PUBLIC_LINK_URL, {
+          method: 'HEAD',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (res.status === 405 || res.status === 501) {
+          res = await fetch(PUBLIC_LINK_URL, {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal,
           });
         }
-      } else {
-        const nextStatus: PublicLinkStatus = {
-          state: 'degraded',
-          statusCode: data.status || 0,
-          latencyMs: data.latencyMs,
-          checkedAt: data.checkedAt || new Date().toISOString(),
-          detail: data.statusText || 'Public link returned an error.',
-        };
-        setLinkStatus(nextStatus);
-        if (forceToast || lastAnnouncedStateRef.current !== 'degraded') {
-          lastAnnouncedStateRef.current = 'degraded';
-          onEmitToastRef.current({
-            type: 'warning',
-            title: 'Public Link Status Alert',
-            message: `${new URL(PUBLIC_LINK_URL).host} responded with ${data.status ? `HTTP ${data.status}` : data.statusText || 'an error'}.`,
-            durationMs: 4800,
+        clearTimeout(timer);
+        const latencyMs = Date.now() - startedAt;
+
+        if (res.ok) {
+          setLinkStatus({
+            state: 'healthy',
+            statusCode: res.status || 200,
+            latencyMs,
+            checkedAt: new Date().toISOString(),
+            detail: `Public link online (${res.status || 200} · ${latencyMs}ms)`,
           });
+          if (forceToast || lastAnnouncedStateRef.current !== 'healthy') {
+            lastAnnouncedStateRef.current = 'healthy';
+            onEmitToastRef.current({
+              type: 'success',
+              title: 'Public Link Online & Healthy',
+              message: `Verified ${targetUrl.host} (${res.status || 200} OK · ${latencyMs}ms)`,
+              durationMs: 3600,
+            });
+          }
+        } else {
+          setLinkStatus({
+            state: 'degraded',
+            statusCode: res.status,
+            latencyMs,
+            checkedAt: new Date().toISOString(),
+            detail: res.statusText || `HTTP ${res.status}`,
+          });
+          if (forceToast || lastAnnouncedStateRef.current !== 'degraded') {
+            lastAnnouncedStateRef.current = 'degraded';
+            onEmitToastRef.current({
+              type: 'warning',
+              title: 'Public Link Status Alert',
+              message: `${targetUrl.host} responded with HTTP ${res.status}.`,
+              durationMs: 4800,
+            });
+          }
         }
+        return;
+      }
+
+      // Cross-origin static reachability probe (no backend server required)
+      await fetch(PUBLIC_LINK_URL, {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const latencyMs = Date.now() - startedAt;
+
+      setLinkStatus({
+        state: 'healthy',
+        statusCode: 200,
+        latencyMs,
+        checkedAt: new Date().toISOString(),
+        detail: `Public link reachable (${latencyMs}ms)`,
+      });
+      if (forceToast || lastAnnouncedStateRef.current !== 'healthy') {
+        lastAnnouncedStateRef.current = 'healthy';
+        onEmitToastRef.current({
+          type: 'success',
+          title: 'Public Link Online & Healthy',
+          message: `Verified ${targetUrl.host} reachable (${latencyMs}ms)`,
+          durationMs: 3600,
+        });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to reach public link';
+      clearTimeout(timer);
+      const msg =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'Public link check timed out.'
+          : err instanceof Error
+            ? err.message
+            : 'Unable to reach public link';
       setLinkStatus({
         state: 'degraded',
         checkedAt: new Date().toISOString(),
@@ -123,6 +167,8 @@ export function usePublicLinkMonitor({
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const initialTimer = setTimeout(() => {
       void checkPublicLink(false);
     }, 1800);
@@ -135,7 +181,7 @@ export function usePublicLinkMonitor({
       clearTimeout(initialTimer);
       clearInterval(intervalId);
     };
-  }, [isOnline, checkPublicLink]);
+  }, [enabled, isOnline, checkPublicLink]);
 
   return {
     linkStatus,

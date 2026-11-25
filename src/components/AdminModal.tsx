@@ -266,7 +266,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         : 'text-sky-500'
                   }`}
                 />
-                <span>Public Deployment Monitor</span>
+                <span>Public Link Monitor</span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                     linkStatus.state === 'healthy'
@@ -279,8 +279,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   {linkStatus.state}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                {linkStatus.detail || PUBLIC_LINK_URL}
+              {linkStatus.detail && (
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 truncate">
+                  {linkStatus.detail}
+                </p>
+              )}
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate" title={PUBLIC_LINK_URL}>
+                {PUBLIC_LINK_URL}
               </p>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">

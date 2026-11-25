@@ -478,7 +478,7 @@ export default defineConfig(() => {
           globIgnores: ['**/android-studio-bundle.json', '**/portable-html-bundle.json', '**/version.json'],
           navigateFallback: '/index.html',
           navigateFallbackAllowlist: [/.*/],
-          navigateFallbackDenylist: [/^\/api\//],
+          navigateFallbackDenylist: [/^\/api\//, /^\/(?:privacy|terms)\.html$/],
           clientsClaim: true,
           skipWaiting: true,
           runtimeCaching: [
@@ -548,11 +548,17 @@ export default defineConfig(() => {
       },
     },
     server: {
+      port: 3000,
+      host: '0.0.0.0',
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    preview: {
+      port: 3000,
+      host: '0.0.0.0',
     },
   };
 });

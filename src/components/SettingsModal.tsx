@@ -26,7 +26,6 @@ import {
   syncAllMonthsToFirestore,
   verifyGmailOtpCode,
 } from '../services/firebaseSyncService';
-import { PUBLIC_LINK_URL, type PublicLinkStatus } from '../hooks/usePublicLinkMonitor';
 import { exportAndroidStudioProjectZip } from '../utils/androidStudioExporter';
 import { exportPortableAppFolderZip } from '../utils/portableBundleExporter';
 import {
@@ -90,7 +89,6 @@ import {
   BookOpen,
   MailCheck,
   Compass,
-  Activity,
   Fingerprint,
 } from 'lucide-react';
 
@@ -110,8 +108,6 @@ interface SettingsModalProps {
   onRestoreFolderData?: (loaded: LoadedFolderDatabase) => void;
   onOpenAdmin?: () => void;
   onReplayTour?: () => void;
-  linkStatus?: PublicLinkStatus;
-  onCheckPublicLink?: (forceToast?: boolean) => Promise<void>;
   onEmitToast?: (toast: Omit<TopToastItem, 'id'>) => void;
 }
 
@@ -131,8 +127,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onRestoreFolderData,
   onOpenAdmin,
   onReplayTour,
-  linkStatus,
-  onCheckPublicLink,
   onEmitToast,
 }) => {
   const [backups, setBackups] = useState<CloudBackupRecord[]>(() => getCloudBackups());
@@ -2389,63 +2383,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
-          {/* 2E. Guided Onboarding Tour & Background Public Link Health */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {onReplayTour && (
-              <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs lg:text-sm">
-                    <Compass className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Interactive Welcome Tour</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                    Walk through key shortcuts, offline sync, and dynamic category renaming.
-                  </p>
+          {/* 2E. Guided Onboarding Tour */}
+          {onReplayTour && (
+            <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs lg:text-sm">
+                  <Compass className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Interactive Welcome Tour</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onReplayTour();
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-md cursor-pointer shrink-0 transition-colors"
-                >
-                  Replay Tour
-                </button>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                  Walk through key shortcuts, offline sync, and dynamic category renaming.
+                </p>
               </div>
-            )}
-
-            {onCheckPublicLink && (
-              <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs lg:text-sm">
-                    <Activity className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Public Link Monitor</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug truncate">
-                    {linkStatus?.state === 'healthy'
-                      ? `Online (${linkStatus.latencyMs ?? 0} ms)`
-                      : linkStatus?.state === 'checking'
-                      ? 'Checking public link...'
-                      : linkStatus?.detail || 'Monitored automatically in background'}
-                  </p>
-                  <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-0.5 truncate" title={PUBLIC_LINK_URL}>
-                    {PUBLIC_LINK_URL}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void onCheckPublicLink(true);
-                  }}
-                  disabled={linkStatus?.state === 'checking'}
-                  className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-md cursor-pointer shrink-0 transition-colors"
-                >
-                  {linkStatus?.state === 'checking' ? 'Pinging...' : 'Ping Link'}
-                </button>
-              </div>
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onReplayTour();
+                }}
+                className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-md cursor-pointer shrink-0 transition-colors"
+              >
+                Replay Tour
+              </button>
+            </div>
+          )}
 
           {/* 3. Backup History & Snapshots */}
           <div className="space-y-2.5 pt-1">
@@ -2511,7 +2472,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 flex items-center justify-end text-xs lg:text-sm shrink-0">
+        <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 flex items-center justify-between gap-3 text-xs lg:text-sm shrink-0">
+          <div className="flex items-center gap-3 text-[11px] lg:text-xs text-slate-500 dark:text-slate-400">
+            <a
+              href="/privacy.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-emerald-600 dark:hover:text-emerald-400 underline-offset-2 hover:underline"
+            >
+              Privacy Policy
+            </a>
+            <span aria-hidden="true">·</span>
+            <a
+              href="/terms.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-emerald-600 dark:hover:text-emerald-400 underline-offset-2 hover:underline"
+            >
+              Terms of Service
+            </a>
+          </div>
           <button
             type="button"
             onClick={onClose}

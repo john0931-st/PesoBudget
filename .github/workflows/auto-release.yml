@@ -24,10 +24,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build production bundle & compute auto-release metadata
         run: npm run build
@@ -67,7 +66,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             /repos/${{ github.repository }} \
             -f description="PesoBudget (${{ steps.meta.outputs.tag }}) — Offline-ready Philippine payroll & expense workbook with Firebase sync, Gmail OTP verification, dynamic category analytics, and auto-updating PDF manual." \
-            -f homepage="https://ais-pre-juv42jdfqkfmr4uvlolrey-190160227104.asia-east1.run.app" || true
+            -f homepage="https://pesobudget-ph.web.app" || true
 
       - name: Ensure standard GitHub repository labels exist
         env:
