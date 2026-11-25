@@ -24,8 +24,12 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
 ## Latest Releases (Auto-Updated)
 
 <!-- AUTO-RELEASE-START -->
-**Current Version:** `v2.5.2` (2026-11-25 · 8:27 PM PHT) — *App Shell & Metadata & App Package & Version Updates*
+**Current Version:** `v2.5.3` (2026-11-25 · 8:52 PM PHT) — *PWA & Public Assets & App Package & Version Updates*
 
+- **v2.5.3** (2026-11-25 · 8:52 PM PHT) — **PWA & Public Assets & App Package & Version Updates**
+  - Added PWA & Public Assets (pwa & assets).
+  - Updated application configuration and package dependencies.
+  - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
 - **v2.5.2** (2026-11-25 · 8:27 PM PHT) — **App Shell & Metadata & App Package & Version Updates**
   - Updated App Shell & Metadata cloud synchronization and offline handling.
   - Updated application configuration and package dependencies.
@@ -38,11 +42,6 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
   - Added Interactive Welcome Tour (user onboarding).
   - Added Top Toast Notifications (ui & navigation).
   - Added Use Currency (app behavior).
-- **v2.4.0** (2026-11-16 · 9:48 PM PHT) — **Modern Cell Fills, Dark Mode & Live Update Notices**
-  - Modernized cell fill colors for Total, Salary, Balance, QR PH, Metrobank, MP2, and GoTyme rows across Light and Dark modes.
-  - Added a Light / Dark theme toggle beside the online/offline indicator with full dark mode styling across tables, charts, and modals.
-  - Added a 'No Previous Balance' option when creating a new sheet using the Clean Default Template.
-  - Adjusted popup and modal bounds to respect browser address bars and mobile navigation bars.
 <!-- AUTO-RELEASE-END -->
 
 ---
