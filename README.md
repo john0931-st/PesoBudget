@@ -24,11 +24,18 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
 ## Latest Releases (Auto-Updated)
 
 <!-- AUTO-RELEASE-START -->
-**Current Version:** `v2.5.0` — *Workspace, Offline Sync & Strict Auth Release*
+**Current Version:** `v2.5.0` (2026-11-25 · 7:52 PM PHT) — *New Features: Spreadsheet & Cells & Workspace & Navigation*
 
-- Dynamically updates renamed category labels across sheets, summaries, charts, and exports.
-- Enables true offline mode on the public link with permanent offline edit upload & discard controls.
-- Adds 6-digit Gmail OTP verification for Google Sign-In, Onboarding Tour, Top Toasts, Public Link Monitor, and Developer Admin Console.
+- **v2.5.0** (2026-11-25 · 7:52 PM PHT) — **New Features: Spreadsheet & Cells & Workspace & Navigation**
+  - Added Developer Admin Console (admin & access control).
+  - Added Interactive Welcome Tour (user onboarding).
+  - Added Top Toast Notifications (ui & navigation).
+  - Added Use Currency (app behavior).
+- **v2.4.0** (2026-11-16 · 9:48 PM PHT) — **Modern Cell Fills, Dark Mode & Live Update Notices**
+  - Modernized cell fill colors for Total, Salary, Balance, QR PH, Metrobank, MP2, and GoTyme rows across Light and Dark modes.
+  - Added a Light / Dark theme toggle beside the online/offline indicator with full dark mode styling across tables, charts, and modals.
+  - Added a 'No Previous Balance' option when creating a new sheet using the Clean Default Template.
+  - Adjusted popup and modal bounds to respect browser address bars and mobile navigation bars.
 <!-- AUTO-RELEASE-END -->
 
 ---
