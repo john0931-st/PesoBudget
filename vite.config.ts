@@ -478,7 +478,7 @@ export default defineConfig(() => {
           globIgnores: ['**/android-studio-bundle.json', '**/portable-html-bundle.json', '**/version.json'],
           navigateFallback: '/index.html',
           navigateFallbackAllowlist: [/.*/],
-          navigateFallbackDenylist: [/^\/api\//, /^\/(?:privacy|terms)\.html$/],
+          navigateFallbackDenylist: [/^\/api\//, /^\/(?:privacy|terms)\.html$/, /^\/google[a-z0-9]+\.html$/i],
           clientsClaim: true,
           skipWaiting: true,
           runtimeCaching: [
