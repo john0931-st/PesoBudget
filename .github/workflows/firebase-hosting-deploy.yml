@@ -9,24 +9,32 @@ on:
 
 jobs:
   build_and_deploy:
-    if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GEN_LANG_CLIENT_0699396067 != '' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Check Firebase Service Account Secret
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GEN_LANG_CLIENT_0699396067 }}
+        run: |
+          if [ -z "$FIREBASE_SA" ]; then
+            echo "::error::Missing secret FIREBASE_SERVICE_ACCOUNT_GEN_LANG_CLIENT_0699396067. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps --no-package-lock --no-audit --no-fund
 
       - name: Build production static bundle
         run: npm run build
 
-      - name: Deploy to Firebase Hosting (gen-lang-client-0699396067)
+      - name: Deploy to Firebase Hosting (pesobudget-ph)
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
