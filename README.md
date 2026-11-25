@@ -24,8 +24,12 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
 ## Latest Releases (Auto-Updated)
 
 <!-- AUTO-RELEASE-START -->
-**Current Version:** `v2.5.1` (2026-11-25 · 8:01 PM PHT) — *App Shell & Metadata Update*
+**Current Version:** `v2.5.2` (2026-11-25 · 8:27 PM PHT) — *App Shell & Metadata & App Package & Version Updates*
 
+- **v2.5.2** (2026-11-25 · 8:27 PM PHT) — **App Shell & Metadata & App Package & Version Updates**
+  - Updated App Shell & Metadata cloud synchronization and offline handling.
+  - Updated application configuration and package dependencies.
+  - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
 - **v2.5.1** (2026-11-25 · 8:01 PM PHT) — **App Shell & Metadata Update**
   - Updated App Shell & Metadata functionality and layout.
   - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
