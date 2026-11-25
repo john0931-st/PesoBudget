@@ -10,6 +10,9 @@
       :root {
         color-scheme: dark;
       }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -20,7 +23,7 @@
       .wrap {
         max-width: 780px;
         margin: 0 auto;
-        padding: 40px 20px 64px;
+        padding: 32px 16px 64px;
       }
       .brand {
         display: flex;
@@ -31,6 +34,7 @@
       .logo {
         width: 40px;
         height: 40px;
+        flex-shrink: 0;
         border-radius: 10px;
         background: #059669;
         color: #ffffff;
@@ -49,13 +53,16 @@
         color: #94a3b8;
         font-size: 13px;
         margin-bottom: 28px;
+        overflow-wrap: anywhere;
       }
       .card {
         background: #0f172a;
         border: 1px solid #1e293b;
         border-radius: 14px;
-        padding: 24px;
+        padding: 20px;
         margin-bottom: 18px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
       h2 {
         font-size: 17px;
@@ -71,9 +78,19 @@
         padding-left: 20px;
         margin: 8px 0 0;
       }
+      code {
+        background: #1e293b;
+        color: #a7f3d0;
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-size: 12.5px;
+        overflow-wrap: anywhere;
+        word-break: break-all;
+      }
       a {
         color: #34d399;
         text-decoration: none;
+        overflow-wrap: anywhere;
       }
       a:hover {
         text-decoration: underline;
