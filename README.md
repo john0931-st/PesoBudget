@@ -24,8 +24,12 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
 ## Latest Releases (Auto-Updated)
 
 <!-- AUTO-RELEASE-START -->
-**Current Version:** `v2.5.3` (2026-11-25 · 8:52 PM PHT) — *PWA & Public Assets & App Package & Version Updates*
+**Current Version:** `v2.5.4` (2026-11-25 · 9:06 PM PHT) — *PWA & Public Assets & App Package & Version Updates*
 
+- **v2.5.4** (2026-11-25 · 9:06 PM PHT) — **PWA & Public Assets & App Package & Version Updates**
+  - Updated PWA & Public Assets styling and Light/Dark theme appearance.
+  - Updated application configuration and package dependencies.
+  - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
 - **v2.5.3** (2026-11-25 · 8:52 PM PHT) — **PWA & Public Assets & App Package & Version Updates**
   - Added PWA & Public Assets (pwa & assets).
   - Updated application configuration and package dependencies.
@@ -37,11 +41,6 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
 - **v2.5.1** (2026-11-25 · 8:01 PM PHT) — **App Shell & Metadata Update**
   - Updated App Shell & Metadata functionality and layout.
   - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
-- **v2.5.0** (2026-11-25 · 7:52 PM PHT) — **New Features: Spreadsheet & Cells & Workspace & Navigation**
-  - Added Developer Admin Console (admin & access control).
-  - Added Interactive Welcome Tour (user onboarding).
-  - Added Top Toast Notifications (ui & navigation).
-  - Added Use Currency (app behavior).
 <!-- AUTO-RELEASE-END -->
 
 ---
