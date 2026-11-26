@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { MonthData, RowId } from '../types/budget';
 import { formatPHP } from '../utils/currency';
 import {
@@ -20,6 +20,7 @@ interface MonthlySummaryProps {
   allMonths?: Record<string, MonthData>;
   onOpenSalaryModal: () => void;
   onSelectMonth?: (monthId: string) => void;
+  onCardChange?: (cardIndex: number) => void;
 }
 
 export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
@@ -27,9 +28,14 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
   allMonths = {},
   onOpenSalaryModal,
   onSelectMonth,
+  onCardChange,
 }) => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   useCurrency();
+
+  useEffect(() => {
+    onCardChange?.(currentCardIndex);
+  }, [currentCardIndex, onCardChange]);
 
   const combinedMonth: CombinedMonthData = useMemo(() => {
     const validMonths = Object.keys(allMonths).length > 0 ? allMonths : { [monthData.id]: monthData };
@@ -140,6 +146,7 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
           </div>
 
           <button
+            data-coach-target="coach-summary-adjust-salary"
             onClick={onOpenSalaryModal}
             className="inline-flex items-center gap-1 px-2 py-0.5 lg:px-2.5 lg:py-1 text-xs lg:text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer shadow-2xs"
           >
@@ -150,7 +157,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
       </div>
 
       {/* Modern Bullet Page Indicator */}
-      <div className="flex items-center justify-center gap-1.5 py-0.5 shrink-0">
+      <div
+        data-coach-target="coach-summary-carousel-dots"
+        className="flex items-center justify-center gap-1.5 py-0.5 shrink-0"
+      >
         {Array.from({ length: totalCards }).map((_, idx) => (
           <button
             key={idx}
@@ -191,7 +201,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
               </span>
             </div>
 
-            <div className="space-y-1.5 lg:space-y-2.5 text-xs sm:text-[13px] lg:text-sm xl:text-base bg-slate-50 dark:bg-slate-800/60 p-2.5 sm:p-3.5 lg:p-4 rounded-xl border border-slate-200 dark:border-slate-700 font-mono my-auto">
+            <div
+              data-coach-target="coach-summary-ledger-card"
+              className="space-y-1.5 lg:space-y-2.5 text-xs sm:text-[13px] lg:text-sm xl:text-base bg-slate-50 dark:bg-slate-800/60 p-2.5 sm:p-3.5 lg:p-4 rounded-xl border border-slate-200 dark:border-slate-700 font-mono my-auto"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-slate-700 dark:text-slate-300 font-sans font-medium text-xs sm:text-[13px] lg:text-sm xl:text-base">Gross Monthly {salaryLabel}:</span>
                 <span className="font-bold text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm lg:text-base xl:text-lg tabular-nums">
@@ -284,7 +297,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 lg:gap-3 my-auto">
+            <div
+              data-coach-target="coach-summary-p1-cutoffs"
+              className="grid grid-cols-1 md:grid-cols-3 gap-2.5 lg:gap-3 my-auto"
+            >
               {cutoffSummaries.map((cutoff, idx) => (
                 <div
                   key={cutoff.id}
@@ -328,7 +344,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
                 </div>
               ))}
 
-              <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2.5 sm:p-3 lg:p-3.5 space-y-1.5">
+              <div
+                data-coach-target="coach-summary-p1-total"
+                className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2.5 sm:p-3 lg:p-3.5 space-y-1.5"
+              >
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] lg:text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded uppercase">
                     Full Month Total
@@ -385,7 +404,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
             </div>
 
             <div className="my-auto py-1.5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 lg:gap-4">
+              <div
+                data-coach-target="coach-summary-p2-cards"
+                className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 lg:gap-4"
+              >
                 <div className="bg-slate-900 dark:bg-slate-800 border border-transparent dark:border-slate-700 text-white rounded-xl p-3.5 sm:p-4 lg:p-5 space-y-1 shadow-2xs">
                   <div className="text-xs lg:text-sm text-slate-300 font-medium">{metroLabel} (Withdrawn Money)</div>
                   <div className="font-mono text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-white tabular-nums">
@@ -418,7 +440,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
               </div>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 lg:p-4 text-xs lg:text-sm text-slate-600 dark:text-slate-300 space-y-0.5 shrink-0 mt-auto">
+            <div
+              data-coach-target="coach-summary-p2-clarity"
+              className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 lg:p-4 text-xs lg:text-sm text-slate-600 dark:text-slate-300 space-y-0.5 shrink-0 mt-auto"
+            >
               <strong className="text-slate-800 dark:text-slate-100 text-xs lg:text-sm">Payment Outflow Clarity:</strong>
               <p className="text-xs lg:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                 {metroLabel} is the ATM withdrawal to pay physical bills. {qrLabel} is the direct digital payment method for {lazadaLabel}. Together, they represent the total capital outflow with zero double-counting.
@@ -443,7 +468,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
             </div>
 
             {nextPayrollItems.length === 0 ? (
-              <div className="my-auto p-6 lg:p-8 bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-xs lg:text-sm text-slate-500 dark:text-slate-400 space-y-1.5 flex flex-col items-center justify-center">
+              <div
+                data-coach-target="coach-summary-p3-deferred"
+                className="my-auto p-6 lg:p-8 bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-xs lg:text-sm text-slate-500 dark:text-slate-400 space-y-1.5 flex flex-col items-center justify-center"
+              >
                 <CheckCircle2 className="w-9 h-9 lg:w-11 lg:h-11 text-emerald-600 dark:text-emerald-400" />
                 <div className="font-bold text-slate-800 dark:text-slate-100 text-sm lg:text-base">All Bills Settled</div>
                 <div className="text-slate-500 dark:text-slate-400 max-w-sm lg:max-w-md mx-auto text-xs lg:text-sm leading-relaxed">
@@ -451,7 +479,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="my-auto grid grid-cols-1 sm:grid-cols-2 gap-2.5 lg:gap-3">
+              <div
+                data-coach-target="coach-summary-p3-deferred"
+                className="my-auto grid grid-cols-1 sm:grid-cols-2 gap-2.5 lg:gap-3"
+              >
                 {nextPayrollItems.map((item) => (
                   <div
                     key={item.id}

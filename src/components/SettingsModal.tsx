@@ -108,6 +108,7 @@ interface SettingsModalProps {
   onRestoreFolderData?: (loaded: LoadedFolderDatabase) => void;
   onOpenAdmin?: () => void;
   onReplayTour?: () => void;
+  onReplayCellTips?: () => void;
   onEmitToast?: (toast: Omit<TopToastItem, 'id'>) => void;
 }
 
@@ -127,6 +128,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onRestoreFolderData,
   onOpenAdmin,
   onReplayTour,
+  onReplayCellTips,
   onEmitToast,
 }) => {
   const [backups, setBackups] = useState<CloudBackupRecord[]>(() => getCloudBackups());
@@ -2383,28 +2385,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
-          {/* 2E. Guided Onboarding Tour */}
-          {onReplayTour && (
-            <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex items-center justify-between gap-3">
+          {/* 2E. Guided Onboarding Tour & Interactive Cell Tips */}
+          {(onReplayTour || onReplayCellTips) && (
+            <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs lg:text-sm">
                   <Compass className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Interactive Welcome Tour</span>
+                  <span>Interactive Walkthrough &amp; Cell Tips</span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Walk through key shortcuts, offline sync, and dynamic category renaming.
+                  Replay the overview tour or step-by-step cell &amp; sheet arrow tips for Sheet, Summary &amp; Graphs, and Change Log.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onReplayTour();
-                }}
-                className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-md cursor-pointer shrink-0 transition-colors"
-              >
-                Replay Tour
-              </button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {onReplayCellTips && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onReplayCellTips();
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md cursor-pointer shrink-0 whitespace-nowrap transition-colors"
+                  >
+                    Replay Cell Tips
+                  </button>
+                )}
+                {onReplayTour && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onReplayTour();
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-md cursor-pointer shrink-0 whitespace-nowrap transition-colors"
+                  >
+                    Replay Tour
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

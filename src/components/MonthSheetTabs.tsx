@@ -305,7 +305,10 @@ export const MonthSheetTabs: React.FC<MonthSheetTabsProps> = ({
       )}
 
       {/* Main Modern Sheet Dock Container */}
-      <div className="w-full mt-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs p-1 select-none text-xs sm:text-[13px] lg:text-sm font-sans transition-colors">
+      <div
+        data-coach-target="coach-sheet-bottom-tabs"
+        className="w-full mt-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs p-1 select-none text-xs sm:text-[13px] lg:text-sm font-sans transition-colors"
+      >
         <div className="flex items-center gap-1.5">
           {/* Scroll controls (left) */}
           <button

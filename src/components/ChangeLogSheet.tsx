@@ -218,7 +218,10 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2.5">
+          <div
+            data-coach-target="coach-changelog-export"
+            className="flex items-center gap-2.5"
+          >
             <button
               onClick={() => exportChangeLogsToCSV(filteredLogs)}
               disabled={filteredLogs.length === 0}
@@ -241,7 +244,10 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
         </div>
 
         {/* Quick Stats bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div
+          data-coach-target="coach-changelog-stats"
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800"
+        >
           <div className="bg-slate-50 dark:bg-slate-800/70 rounded-lg p-2.5 lg:p-3 border border-slate-200/60 dark:border-slate-700">
             <span className="text-[11px] lg:text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Logged ({targetYear})</span>
             <span className="text-lg lg:text-2xl font-bold text-slate-800 dark:text-slate-100">{yearLogs.length}</span>
@@ -262,7 +268,10 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
       </div>
 
       {/* Filter / Search Bar */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2.5 shrink-0 flex flex-wrap items-center justify-between gap-2.5">
+      <div
+        data-coach-target="coach-changelog-search-filter"
+        className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2.5 shrink-0 flex flex-wrap items-center justify-between gap-2.5"
+      >
         <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -313,7 +322,10 @@ export const ChangeLogSheet: React.FC<ChangeLogSheetProps> = ({
 
       {/* Spreadsheet Table View */}
       <div className="flex-1 min-h-[240px] overflow-auto bg-slate-100 dark:bg-slate-950 p-2 sm:p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/95 dark:border-slate-700/80 ring-1 ring-slate-900/[0.04] dark:ring-white/[0.05] shadow-[0_6px_28px_-6px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] overflow-hidden">
+        <div
+          data-coach-target="coach-changelog-table"
+          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/95 dark:border-slate-700/80 ring-1 ring-slate-900/[0.04] dark:ring-white/[0.05] shadow-[0_6px_28px_-6px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] overflow-hidden"
+        >
           {filteredLogs.length === 0 ? (
             <div className="p-12 text-center flex flex-col items-center justify-center">
               <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-400 dark:text-slate-500">

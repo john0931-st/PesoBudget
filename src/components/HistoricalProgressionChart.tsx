@@ -172,7 +172,10 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
       </div>
 
       {/* Top Chart Box: Monthly Salary vs Expenses */}
-      <div className="flex-1 min-h-[180px] flex flex-col justify-between bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1.5">
+      <div
+        data-coach-target="coach-history-cashflow"
+        className="flex-1 min-h-[180px] flex flex-col justify-between bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1.5"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
@@ -313,7 +316,10 @@ export const HistoricalProgressionChart: React.FC<HistoricalProgressionChartProp
       </div>
 
       {/* Bottom Chart Box: Monthly Dynamic Locked Savings (MP2) vs Withdrawable Savings (GoTyme / MariBank) */}
-      <div className="flex-1 min-h-[180px] flex flex-col justify-between bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1.5">
+      <div
+        data-coach-target="coach-history-savings"
+        className="flex-1 min-h-[180px] flex flex-col justify-between bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-2 sm:p-2.5 lg:p-3.5 space-y-1.5"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs sm:text-[13px] lg:text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">

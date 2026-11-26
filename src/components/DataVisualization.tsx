@@ -29,18 +29,30 @@ interface DataVisualizationProps {
   monthData: MonthData;
   allMonths?: Record<string, MonthData>;
   onSelectMonth?: (monthId: string) => void;
+  onCardChange?: (cardIndex: number) => void;
+  onViewModeChange?: (mode: 'cards' | 'full_report') => void;
 }
 
 export const DataVisualization: React.FC<DataVisualizationProps> = ({
   monthData,
   allMonths = {},
   onSelectMonth,
+  onCardChange,
+  onViewModeChange,
 }) => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'full_report'>('cards');
   useCurrency();
+
+  useEffect(() => {
+    onCardChange?.(currentCardIndex);
+  }, [currentCardIndex, onCardChange]);
+
+  useEffect(() => {
+    onViewModeChange?.(viewMode);
+  }, [viewMode, onViewModeChange]);
 
   // Automatically reset slice highlight when tapping or clicking outside
   useEffect(() => {
@@ -268,7 +280,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
         <div className="text-xs lg:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
           Overall Summary & Graphs · <span className="font-mono text-emerald-800 dark:text-emerald-400">{sheetCount} Sheets ({historicalCalendarMonths.length} Months)</span>
         </div>
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <div
+          data-coach-target="coach-charts-view-toggle"
+          className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700"
+        >
           <button
             type="button"
             onClick={() => setViewMode('cards')}
@@ -295,7 +310,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
       </div>
 
       {/* Modern Bullet Page Indicator (No Numbers, Clean Modern Design Just Above the Cards) */}
-      <div className={`flex items-center justify-center gap-1.5 py-0.5 shrink-0 print:hidden ${viewMode === 'full_report' ? 'hidden' : 'flex'}`}>
+      <div
+        data-coach-target="coach-charts-carousel-dots"
+        className={`flex items-center justify-center gap-1.5 py-0.5 shrink-0 print:hidden ${viewMode === 'full_report' ? 'hidden' : 'flex'}`}
+      >
         {Array.from({ length: totalCards }).map((_, idx) => (
           <button
             key={idx}
@@ -345,7 +363,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             </div>
 
             {/* Top 5 Key Metric Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3 shrink-0">
+            <div
+              data-coach-target="coach-charts-kpi-grid"
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3 shrink-0"
+            >
               {/* 1. Total Bills */}
               <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between space-y-1">
                 <span className="text-[11px] lg:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Total Monthly Bills</span>
@@ -423,7 +444,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
             </div>
 
             {/* Middle: Salary Allocation & Monthly Capital Distribution Bar */}
-            <div className="bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-4 space-y-2 lg:space-y-3 shrink-0">
+            <div
+              data-coach-target="coach-charts-allocation-bar"
+              className="bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 sm:p-3 lg:p-4 space-y-2 lg:space-y-3 shrink-0"
+            >
               <div className="flex items-center justify-between text-xs lg:text-sm">
                 <div className="flex items-center gap-1.5">
                   <PieChart className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-slate-700 dark:text-slate-300" />
@@ -538,7 +562,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{sheetCount} Sheets</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 lg:gap-3 my-auto">
+              <div
+                data-coach-target="coach-charts-p1-cutoffs"
+                className="grid grid-cols-1 md:grid-cols-3 gap-2.5 lg:gap-3 my-auto"
+              >
                 {cutoffSummaries.map((cutoff, idx) => (
                   <div
                     key={cutoff.id}
@@ -587,7 +614,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 ))}
 
                 {/* Full Month Total Column */}
-                <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2.5 sm:p-3 lg:p-3.5 space-y-1.5">
+                <div
+                  data-coach-target="coach-charts-p1-total"
+                  className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl p-2.5 sm:p-3 lg:p-3.5 space-y-1.5"
+                >
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] lg:text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded uppercase">
                       Full Month Total
@@ -682,7 +712,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 return (
                   <div className="my-auto flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 lg:gap-6 py-1 overflow-hidden">
                     {/* SVG Donut */}
-                    <div className={`relative ${donutSizeClass} shrink-0 mx-auto md:mx-0 transition-all`}>
+                    <div
+                      data-coach-target="coach-charts-p2-donut"
+                      className={`relative ${donutSizeClass} shrink-0 mx-auto md:mx-0 transition-all`}
+                    >
                       <svg viewBox="0 0 200 200" className="w-full h-full transform -rotate-90">
                         {donutSlices.map((slice) => {
                           const isSelected = activeSliceId === slice.id;
@@ -736,7 +769,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                     </div>
 
                     {/* Category Legend adapting layout dynamically */}
-                    <div className={`flex-1 w-full grid ${gridColsClass} gap-1.5 lg:gap-2`}>
+                    <div
+                      data-coach-target="coach-charts-p2-legend"
+                      className={`flex-1 w-full grid ${gridColsClass} gap-1.5 lg:gap-2`}
+                    >
                       {donutSlices.map((slice) => {
                         const isSelected = activeSliceId === slice.id;
                         return (
@@ -828,7 +864,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
 
               <div className="my-auto py-2 grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5">
                 {/* Left: Planned Channels */}
-                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 sm:p-5 space-y-3">
+                <div
+                  data-coach-target="coach-charts-p3-outflows"
+                  className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 sm:p-5 space-y-3"
+                >
                   <div className="text-xs lg:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                     Planned Outflow Channels
                   </div>
@@ -875,7 +914,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 </div>
 
                 {/* Right: Remarks Settlement Progress */}
-                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 sm:p-5 space-y-3">
+                <div
+                  data-coach-target="coach-charts-p3-settlement"
+                  className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 sm:p-5 space-y-3"
+                >
                   <div className="flex items-center justify-between">
                     <div className="text-xs lg:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                       Settlement Status
@@ -946,7 +988,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                 const gotymePct = savingsBase > 0 ? 100 - mp2Pct : 50;
                 return (
                   <div className="my-auto py-1 sm:py-1.5 space-y-2.5 lg:space-y-4">
-                    <div className="space-y-1">
+                    <div
+                      data-coach-target="coach-charts-p4-splitbar"
+                      className="space-y-1 rounded-lg p-1"
+                    >
                       <div className="flex justify-between text-xs lg:text-sm font-semibold">
                         <span className="text-amber-700 dark:text-amber-400">
                           {mp2Label} (Locked): {mp2Pct}%
@@ -967,7 +1012,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-4">
+                    <div
+                      data-coach-target="coach-charts-p4-cards"
+                      className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-4"
+                    >
                       <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-3 lg:p-4 space-y-1.5 lg:space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
@@ -1043,7 +1091,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
               </div>
 
               <div className="my-auto py-1 space-y-2.5 lg:space-y-3">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3">
+                <div
+                  data-coach-target="coach-charts-p5-steps"
+                  className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3"
+                >
                   <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 lg:p-3.5 flex flex-col justify-between">
                     <span className="text-[11px] lg:text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">1. Gross {salaryLabel}</span>
                     <div className="font-mono text-sm lg:text-base xl:text-lg font-extrabold text-emerald-950 dark:text-emerald-200 my-0.5 tabular-nums">
@@ -1077,7 +1128,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-3">
+                <div
+                  data-coach-target="coach-charts-p5-surplus"
+                  className="grid grid-cols-1 md:grid-cols-2 gap-2.5 lg:gap-3"
+                >
                   <div className="bg-teal-50/85 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl p-3 lg:p-4 space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">

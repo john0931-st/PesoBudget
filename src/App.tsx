@@ -69,6 +69,12 @@ import {
   OnboardingTourModal,
   hasCompletedOnboardingTour,
 } from './components/OnboardingTourModal';
+import {
+  FeatureCoachTutorial,
+  CoachScopeKey,
+  hasCompletedCoachScope,
+  resetAllTabCoachTutorials,
+} from './components/FeatureCoachTutorial';
 import { AdminModal } from './components/AdminModal';
 import { addChangeLog, replaceChangeLogs } from './utils/changeLogService';
 import { useAutoBackup } from './hooks/useAutoBackup';
@@ -319,6 +325,11 @@ export default function App() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isCoachTutorialOpen, setIsCoachTutorialOpen] = useState(false);
+  const [coachReplayTick, setCoachReplayTick] = useState(0);
+  const [chartsCardIndex, setChartsCardIndex] = useState(0);
+  const [chartsViewMode, setChartsViewMode] = useState<'cards' | 'full_report'>('cards');
+  const [summaryCardIndex, setSummaryCardIndex] = useState(0);
   const [securityProfile, setSecurityProfile] = useState<UserSecurityProfile>(() => getSecurityProfile());
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -794,6 +805,72 @@ export default function App() {
     return Object.keys(displayedMonthsForTabs).length > 0;
   }, [displayedMonthsForTabs]);
 
+  const activeCoachScopeKey: CoachScopeKey | null = useMemo(() => {
+    if (activeTab === 'sheet') return 'sheet';
+    if (activeTab === 'charts') {
+      return chartsViewMode === 'cards' ? (`charts:${chartsCardIndex}` as CoachScopeKey) : null;
+    }
+    if (activeTab === 'summary') {
+      return `summary:${summaryCardIndex}` as CoachScopeKey;
+    }
+    return 'changelog';
+  }, [activeTab, chartsCardIndex, chartsViewMode, summaryCardIndex]);
+
+  // Step-by-step spotlight cell & view coach tutorial for new users (triggers per tab & per swiped summary/chart page)
+  useEffect(() => {
+    setIsCoachTutorialOpen(false);
+
+    if (!hasDataForSelectedYear || !activeCoachScopeKey) {
+      return;
+    }
+
+    const anyBlockingModal =
+      isTourOpen ||
+      Boolean(updateNoticeState) ||
+      isLoadingYear ||
+      noDataPopupYear !== null ||
+      isSalaryModalOpen ||
+      isNewMonthModalOpen ||
+      isImportExportModalOpen ||
+      isSettingsModalOpen ||
+      isSyncModalOpen ||
+      isAdminModalOpen ||
+      Boolean(noteTarget) ||
+      Boolean(actionModal);
+
+    if (anyBlockingModal) {
+      return;
+    }
+
+    if (!hasCompletedOnboardingTour()) {
+      return;
+    }
+
+    if (!hasCompletedCoachScope(activeCoachScopeKey)) {
+      const timer = setTimeout(() => {
+        setActiveCell(null);
+        setIsCoachTutorialOpen(true);
+      }, 320);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    activeCoachScopeKey,
+    hasDataForSelectedYear,
+    isTourOpen,
+    updateNoticeState,
+    isLoadingYear,
+    noDataPopupYear,
+    isSalaryModalOpen,
+    isNewMonthModalOpen,
+    isImportExportModalOpen,
+    isSettingsModalOpen,
+    isSyncModalOpen,
+    isAdminModalOpen,
+    noteTarget,
+    actionModal,
+    coachReplayTick,
+  ]);
+
   // Save changes to localStorage and sync to Google Account when online & logged in
   const persistMonths = useCallback(
     (updated: Record<string, MonthData>, options?: { skipHistory?: boolean }) => {
@@ -891,6 +968,7 @@ export default function App() {
       isSyncModalOpen ||
       isAdminModalOpen ||
       isTourOpen ||
+      isCoachTutorialOpen ||
       Boolean(noteTarget) ||
       Boolean(actionModal) ||
       Boolean(updateNoticeState) ||
@@ -938,6 +1016,7 @@ export default function App() {
     isSyncModalOpen,
     isAdminModalOpen,
     isTourOpen,
+    isCoachTutorialOpen,
     noteTarget,
     actionModal,
     updateNoticeState,
@@ -3145,9 +3224,12 @@ export default function App() {
             <div className="flex-1 min-h-0 flex flex-col">
               {hasDataForSelectedYear && currentMonth ? (
                 <DataVisualization
+                  key={`charts_${coachReplayTick}`}
                   monthData={currentMonth}
                   allMonths={displayedMonthsForTabs}
                   onSelectMonth={handleSelectMonth}
+                  onCardChange={setChartsCardIndex}
+                  onViewModeChange={setChartsViewMode}
                 />
               ) : (
                 <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center p-6 sm:p-8 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl text-center shadow-2xs space-y-4">
@@ -3200,10 +3282,12 @@ export default function App() {
             <div className="flex-1 min-h-0 flex flex-col">
               {hasDataForSelectedYear && currentMonth ? (
                 <MonthlySummary
+                  key={`summary_${coachReplayTick}`}
                   monthData={currentMonth}
                   allMonths={displayedMonthsForTabs}
                   onOpenSalaryModal={() => setIsSalaryModalOpen(true)}
                   onSelectMonth={handleSelectMonth}
+                  onCardChange={setSummaryCardIndex}
                 />
               ) : (
                 <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center p-6 sm:p-8 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl text-center shadow-2xs space-y-4">
@@ -3375,6 +3459,15 @@ export default function App() {
         }}
         onOpenAdmin={() => setIsAdminModalOpen(true)}
         onReplayTour={() => setIsTourOpen(true)}
+        onReplayCellTips={() => {
+          resetAllTabCoachTutorials();
+          setChartsCardIndex(0);
+          setChartsViewMode('cards');
+          setSummaryCardIndex(0);
+          setActiveCell(null);
+          setCoachReplayTick((prev) => prev + 1);
+          setIsCoachTutorialOpen(true);
+        }}
         onEmitToast={emitToast}
       />
 
@@ -3426,6 +3519,14 @@ export default function App() {
         isOpen={isTourOpen}
         onClose={() => setIsTourOpen(false)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+      />
+
+      {/* Contextual Floating Arrow Tutorial per Sheet / Swiped Page */}
+      <FeatureCoachTutorial
+        isOpen={isCoachTutorialOpen}
+        scopeKey={activeCoachScopeKey}
+        onComplete={() => setIsCoachTutorialOpen(false)}
+        onSkip={() => setIsCoachTutorialOpen(false)}
       />
 
       {/* Modern 5-Second Loading Screen when Year is Selected */}

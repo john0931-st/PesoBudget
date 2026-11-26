@@ -664,6 +664,11 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
     });
   }, [effectiveRowOrder, remarksFilter, rows, coreNonExpenseSet]);
 
+  const firstCoachExpenseRowId: RowId | null = useMemo(() => {
+    const preferred = displayedRowOrder.find((id) => !coreNonExpenseSet.has(id) && Boolean(rows[id]));
+    return preferred || displayedRowOrder[0] || null;
+  }, [displayedRowOrder, coreNonExpenseSet, rows]);
+
   /**
    * Selects a specific grid coordinate safely without triggering Remarks popup interruptions
    */
@@ -1202,7 +1207,10 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
               </div>
 
               {/* Center slot: Symmetrically centered sheet title + 3-dot options button */}
-              <div className="flex items-center justify-center gap-1 min-w-0 max-w-full">
+              <div
+                data-coach-target="coach-sheet-title-menu"
+                className="flex items-center justify-center gap-1 min-w-0 max-w-full rounded-lg px-1"
+              >
                 <div className="w-7 h-7 shrink-0" aria-hidden="true" />
                 <h1 className={`${adaptive.titleFont} font-extrabold text-slate-900 dark:text-slate-100 font-sans uppercase text-center px-1.5 truncate`}>
                   {currentSheetTitle}
@@ -1233,7 +1241,10 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
         </div>
 
         {/* Sleek Centered Remarks Filter Strip + Quick Settle All Cash Bills */}
-        <div className="bg-slate-50/80 dark:bg-slate-900/95 border-b border-slate-200/80 dark:border-slate-800 px-2.5 sm:px-4 py-1.5 flex flex-wrap items-center justify-center gap-2 text-[11px] sm:text-xs select-none shrink-0">
+        <div
+          data-coach-target="coach-sheet-remarks-filter"
+          className="bg-slate-50/80 dark:bg-slate-900/95 border-b border-slate-200/80 dark:border-slate-800 px-2.5 sm:px-4 py-1.5 flex flex-wrap items-center justify-center gap-2 text-[11px] sm:text-xs select-none shrink-0"
+        >
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
             <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-0.5">
               <Filter className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
@@ -1630,6 +1641,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             <td
                               key={colId}
                               data-cell-key={`${rowId}::${colId}`}
+                              data-coach-target={
+                                rowId === firstCoachExpenseRowId ? 'coach-cell-payment-label' : undefined
+                              }
                               onClick={() => handleCellClick(rowId, 'payments', row)}
                               onDoubleClick={() => handleCellDoubleClick(rowId, 'payments', row)}
                               className={`${adaptive.cellPad} ${borderRightClass} align-middle relative group cursor-pointer select-none overflow-hidden ${getSelectedCellClass(
@@ -1722,10 +1736,20 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             primaryCol === 'cutoff15th' ||
                             (customPrimaryCol ? customPrimaryCol.type === 'currency' : false);
 
+                          const mergedCoachTarget =
+                            rowId === firstCoachExpenseRowId &&
+                            (activeMerge.columns.includes('monthly') || activeMerge.columns.includes('cutoff15th'))
+                              ? 'coach-cell-amount-formula'
+                              : rowId === 'salary' &&
+                                (activeMerge.columns.includes('monthly') || activeMerge.columns.includes('cutoff15th'))
+                              ? 'coach-cell-salary'
+                              : undefined;
+
                           return (
                             <td
                               key={`merged_${activeMerge.columns.join('_')}`}
                               data-cell-key={`${rowId}::${primaryCol}`}
+                              data-coach-target={mergedCoachTarget}
                               colSpan={activeMerge.colSpan}
                               data-merged="true"
                               title={`Merged cell: ${activeMerge.columns
@@ -1860,6 +1884,13 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             <td
                               key={colId}
                               data-cell-key={`${rowId}::${colId}`}
+                              data-coach-target={
+                                rowId === firstCoachExpenseRowId
+                                  ? 'coach-cell-amount-formula'
+                                  : rowId === 'salary'
+                                  ? 'coach-cell-salary'
+                                  : undefined
+                              }
                               onClick={() => handleCellClick(rowId, 'monthly', row)}
                               onDoubleClick={() => handleCellDoubleClick(rowId, 'monthly', row)}
                               className={`${adaptive.cellPad} ${borderRightClass} align-middle relative cursor-pointer select-none text-right font-medium overflow-hidden ${getSelectedCellClass(
@@ -1901,10 +1932,20 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
 
                         // 3B. KINSENAS (15TH) COLUMN (INDIVIDUAL)
                         if (colId === 'cutoff15th') {
+                          const hasMonthlyCol = effectiveColumnOrder.includes('monthly');
                           return (
                             <td
                               key={colId}
                               data-cell-key={`${rowId}::${colId}`}
+                              data-coach-target={
+                                !hasMonthlyCol
+                                  ? rowId === firstCoachExpenseRowId
+                                    ? 'coach-cell-amount-formula'
+                                    : rowId === 'salary'
+                                    ? 'coach-cell-salary'
+                                    : undefined
+                                  : undefined
+                              }
                               onClick={() => handleCellClick(rowId, 'cutoff15th', row)}
                               onDoubleClick={() => handleCellDoubleClick(rowId, 'cutoff15th', row)}
                               className={`${adaptive.cellPad} ${borderRightClass} align-middle relative cursor-pointer select-none text-right font-medium overflow-hidden ${getSelectedCellClass(
@@ -1950,6 +1991,9 @@ export const BudgetTable: React.FC<BudgetTableProps> = ({
                             <td
                               key={colId}
                               data-cell-key={`${rowId}::${colId}`}
+                              data-coach-target={
+                                rowId === firstCoachExpenseRowId ? 'coach-cell-remarks-status' : undefined
+                              }
                               onClick={() => handleCellClick(rowId, 'remarks', row)}
                               className={`${adaptive.cellPad} ${borderRightClass} align-middle text-center relative overflow-hidden ${getSelectedCellClass(
                                 isSelectedRemarks
