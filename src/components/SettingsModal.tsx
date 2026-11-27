@@ -669,7 +669,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const dispatchLockSetupOtp = async (forceRefreshGoogleToken = false) => {
     if (!isOnline) {
-      setLockOtpError('Connect to internet first so we can send your 6-digit Gmail verification code.');
+      setLockOtpError('Connect to internet first so we can send a 6-digit verification code to Gmail.');
       return;
     }
     const currentUser = auth.currentUser;
@@ -680,7 +680,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         variant: 'blocked',
         title: 'Google Sign-In Required',
         message: 'Sign in with Google first before setting a Portable Password Lock.',
-        detail: 'Portable Password Lock setup sends a 6-digit verification code to your verified Gmail.',
+        detail: 'Portable Password Lock setup requires Gmail 6-digit code verification.',
       });
       return;
     }
@@ -708,7 +708,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         message:
           dispatch.deliveryMode === 'oauth_session_code'
             ? 'Enter the 6-digit confirmation code shown to unlock Portable Password setup.'
-            : `Enter the 6-digit verification code sent to ${dispatch.maskedEmail}.`,
+            : `Check ${dispatch.maskedEmail} for your 6-digit code before setting a Portable Password.`,
       });
     } catch (err) {
       setLockOtpError(
@@ -1916,8 +1916,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               {lockOtpSending
                                 ? 'Sending 6-digit verification code to your Gmail...'
                                 : lockOtpDeliveryMode === 'oauth_session_code'
-                                  ? `Google session confirmed for ${lockOtpSentMaskedEmail || loggedInEmail}. Enter the 6-digit confirmation code below or tap Send to Gmail Inbox.`
-                                  : `Sent 6-digit verification code to ${lockOtpSentMaskedEmail || loggedInEmail}. Enter it below before setting your Portable Password.`}
+                                  ? `Google OAuth verified ${lockOtpSentMaskedEmail || loggedInEmail}. Enter the session confirmation code below (or tap Send to Gmail Inbox) before setting your Portable Password.`
+                                  : `We sent a 6-digit verification code to ${lockOtpSentMaskedEmail || loggedInEmail}. Verify it below before setting your Portable Password.`}
                             </p>
                           </div>
                         </div>
@@ -1933,14 +1933,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div className="flex items-center gap-1.5 shrink-0">
                               <button
                                 type="button"
-                                disabled={lockOtpSending}
-                                onClick={() => void dispatchLockSetupOtp(true)}
-                                className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-[10.5px] font-semibold cursor-pointer disabled:opacity-50"
-                              >
-                                Email to Gmail Inbox
-                              </button>
-                              <button
-                                type="button"
                                 onClick={() => {
                                   setLockOtpInput(lockOtpSessionCodeHint);
                                   if (lockOtpError) setLockOtpError(null);
@@ -1948,6 +1940,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-bold cursor-pointer"
                               >
                                 Fill Code
+                              </button>
+                              <button
+                                type="button"
+                                disabled={lockOtpSending}
+                                onClick={() => void dispatchLockSetupOtp(true)}
+                                className="px-2 py-1 rounded bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-[10.5px] font-semibold cursor-pointer disabled:opacity-50"
+                              >
+                                Email to Gmail Inbox
                               </button>
                             </div>
                           </div>

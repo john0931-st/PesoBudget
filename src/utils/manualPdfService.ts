@@ -1171,7 +1171,7 @@ export function downloadUserManualPdf(): {
       feature: 'Strict Gmail OTP Cloud Sync',
       location: 'Settings -> Sign in with Google',
       explanation:
-        'Automatically emails a 6-digit verification code to your Gmail via Google permission (with OAuth fallback if declined) before unlocking Firebase Cloud backup and snapshot restore.',
+        'Emails a 6-digit verification code directly to your Gmail via Google OAuth (or verified session fallback) before unlocking Firebase Cloud backup and snapshot restore.',
     },
     {
       feature: 'True Offline Mode & Upload Prompt',
@@ -1295,7 +1295,7 @@ export function downloadUserManualPdf(): {
     [
       'Step 6',
       'Verify Gmail, Offline Sync & Export',
-      'Open Settings to sign in with Google using your 6-digit Gmail OTP code, review and upload offline edits on reconnection, or export PDF, Excel, and Portable ZIP backups anytime.',
+      'Open Settings to sign in with Google and verify your 6-digit Gmail code, review and upload offline edits on reconnection, or export PDF, Excel, and Portable ZIP backups anytime.',
     ],
   ];
 
@@ -1335,7 +1335,7 @@ export function downloadUserManualPdf(): {
     '- Use the Undo/Redo arrows in the table title bar or press Ctrl+Z / Ctrl+Y to revert or reapply changes, alongside Arrow keys, Tab, and Enter/F2 for fast keyboard entry.',
     '- Rename any payment or savings row inline under PAYMENTS and PesoBudget updates that label across Summary, Charts, and Reports automatically.',
     '- When working offline on the public link, edits stay safely queued locally; upon reconnection, choose Upload & Sync Now so your offline edits replace older cloud data.',
-    '- Signing in with Google automatically emails a 6-digit verification code to your Gmail (with send permission, or via OAuth fallback) directly in the browser; sync alerts appear cleanly at the top of the screen.',
+    '- Signing in with Google automatically emails a 6-digit verification code via your granted Gmail send permission (or uses a verified OAuth confirmation fallback); sync alerts appear cleanly at the top of the screen.',
     '- Sign in with Google and verify the 6-digit Gmail code to set a Portable Password Lock before using Import, Export, Print, Folder Sync, Restore, or optional Biometrics Fingerprint.',
     '- When new updates are published on the public web link, read the automatic changelog popup and click OK to confirm or refresh cleanly.',
   ];
