@@ -24,8 +24,12 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
 ## Latest Releases (Auto-Updated)
 
 <!-- AUTO-RELEASE-START -->
-**Current Version:** `v2.6.0` (2026-11-26 · 6:03 PM PHT) — *New Features: Workspace & Navigation & Data Visualization*
+**Current Version:** `v2.6.1` (2026-11-27 · 5:56 PM PHT) — *Settings & Sync & User Manual & Docs Improvements*
 
+- **v2.6.1** (2026-11-27 · 5:56 PM PHT) — **Settings & Sync & User Manual & Docs Improvements**
+  - Updated Settings & Backups styling and Light/Dark theme appearance.
+  - Updated searchable User Manual (PDF) with visual diagrams and documentation.
+  - Updated application configuration and package dependencies.
 - **v2.6.0** (2026-11-26 · 6:03 PM PHT) — **New Features: Workspace & Navigation & Data Visualization**
   - Added Feature Coach Tutorial (ui & components).
   - Updated Main Workspace functionality and layout.
@@ -37,10 +41,6 @@ An offline-ready spreadsheet and personal budget workbook built specifically for
   - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
 - **v2.5.3** (2026-11-25 · 8:52 PM PHT) — **PWA & Public Assets & App Package & Version Updates**
   - Added PWA & Public Assets (pwa & assets).
-  - Updated application configuration and package dependencies.
-  - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
-- **v2.5.2** (2026-11-25 · 8:27 PM PHT) — **App Shell & Metadata & App Package & Version Updates**
-  - Updated App Shell & Metadata cloud synchronization and offline handling.
   - Updated application configuration and package dependencies.
   - Automatically updated downloadable User Manual (PDF) with the latest release notes and version.
 <!-- AUTO-RELEASE-END -->
